@@ -24,14 +24,15 @@ const Gradient = () => {
   const newSvgDataUrl = `url("data:image/svg+xml;base64,${btoa(newSvg)}")`
 
   return (
-    <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden bg-zinc-700 dark:bg-background">
+    <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden bg-teal-900/20 dark:bg-background">
+
       {/* Glows */}
-      <div className="absolute top-[0%] left-[0%] w-full h-full opacity-100">
-        <div className="absolute inset-0 rounded  bg-zinc-600 dark:bg-sky-500/40 blur-[100px]" />
+      <div className="absolute top-[0%] left-[0%] w-full h-full opacity-50 dark:opacity-100">
+        <div className="absolute inset-0 rounded  bg-sky-400/25 dark:bg-sky-500/40 blur-[100px]" />
       </div>
 
       <div className="-z-20 absolute top-[9%] left-[11%] w-[88%] h-[49%] opacity-100">
-        <div className="absolute inset-0 rounded-3xl  bg-zinc-500 dark:bg-teal-200/15 blur-3xl" />
+        <div className="absolute inset-0 rounded-3xl  bg-teal-800/20 dark:bg-teal-200/15 blur-3xl" />
       </div>
 
       {/* New Noise Overlay */}
