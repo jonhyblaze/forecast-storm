@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { useEffect, useState, useTransition } from "react"
 
-export default function SearchBar({ hasError }: { hasError: boolean }) {
+export default function SearchBar({ hasError, className }: { hasError: boolean; className?: string }) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -30,13 +30,13 @@ export default function SearchBar({ hasError }: { hasError: boolean }) {
   }, [query])
 
   return (
-    <form className="relative flex items-center gap-4">
+    <form className={cn("relative flex items-center gap-4", className)}>
       <input
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         className={cn(
-          "rounded-full ring-0 outline-none border-none bg-foreground/5 px-5.5 py-2.5  placeholder:text-[16px]",
+          "w-full md:w-auto rounded-full ring-0 outline-none border-none bg-foreground/5 px-5.5 py-2.5  placeholder:text-[16px]",
           hasError ? "ring-1 ring-amber-500" : "ring-0"
         )}
         placeholder="Search"

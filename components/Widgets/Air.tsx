@@ -2,19 +2,14 @@ import { Sun, Gauge, Waves } from "lucide-react"
 import Card, { Field } from "@/components/Card/Card"
 import { cn } from "@/lib/utils"
 import { ReactNode } from "react"
-
-type AirType = {
-  uvindex: number
-  pressure: number
-  airquality: number
-}
+import { AirType } from "./types"
 
 type LevelResult = {
   level?: BadgeLevel
   label: string
 }
 
-export default function Air({ data }: { data: AirType }) {
+export default function Air({ data, className }: { data: AirType, className?: string }) {
   const getUVLevel = (uvindex: number | undefined) : LevelResult => {
     if (uvindex === undefined || null) return { label: "No data" }
 
@@ -34,12 +29,23 @@ export default function Air({ data }: { data: AirType }) {
     return { level: 5, label: "Very High" }
   }
 
+  const getAirLevel = (airIndex: number | undefined): LevelResult => {
+    if (airIndex == null) return { label: "No data" }
+
+    if (airIndex <= 20) return { level: 1, label: "Perfect" }
+    if (airIndex <= 40) return { level: 2, label: "Good" }
+    if (airIndex <= 60) return { level: 3, label: "Moderate" }
+    if (airIndex <= 80) return { level: 4, label: "Poor" }
+      else  return { level: 5, label: "Hazardous" }
+  }
+
   const uvLevel = getUVLevel(data.uvindex)
   const pressureLevel = getPressureLevel(data.pressure)
+  const airLevel = getAirLevel(data.airquality)
 
   return (
-    <Card type="air">
-      <ul className="h-full grid grid-rows-3">
+    <Card type="air" className={className}>
+      <ul className="h-full grid grid-rows-3 gap-12 pt-10 md:p-0 md:gap-0">
         <li className="flex items-center justify-between">
           <Field name="UV Index" Icon={Sun} value={`${data.uvindex}`} />
           <Badge className="w-24" level={uvLevel.level}>
@@ -52,7 +58,7 @@ export default function Air({ data }: { data: AirType }) {
         </li>
         <li className="flex items-center justify-between">
           <Field name="Air Quality" Icon={Waves} value={`${data.airquality}`} />
-          <span>Badge</span>
+          <Badge className="w-24" level={airLevel.level}>{airLevel.label}</Badge>
         </li>
       </ul>
     </Card>
@@ -73,10 +79,10 @@ const Badge = ({
   level = 1
 }: BadgeProps) => {
   const variations: Record<BadgeLevel, string> = {
-    1: "bg-zinc-500/75",
+    1: "bg-sky-500/75",
     2: "bg-emerald-500/75",
-    3: "bg-teal-500/75",
-    4: "bg-orange-500/65",
+    3: "bg-amber-500/75",
+    4: "bg-red-500/65",
     5: "bg-red-500/65"
   }
 
