@@ -71,7 +71,7 @@ export type ConditionsType = {
 export type AirType = {
   uvindex: number
   pressure: number
-  airquality: number
+  aqieur: number
 }
 
 export type MoonType = {

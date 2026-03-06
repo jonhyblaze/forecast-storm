@@ -10,17 +10,18 @@ import Conditions from "@/components/Widgets//Conditions"
 import Air from "@/components/Widgets//Air"
 import Moon from "@/components/Widgets//Moon"
 import { getWeatherData } from "@/lib/weather"
-import { headers } from "next/headers"
+import { getClientLocation } from "@/lib/location"
 import { ForecastDay, NormalizedWeather } from "@/components/Widgets/types"
 import { bgMap } from "@/data/icons"
-
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ city?: string }> }) {
   const { city: searchCity } = await searchParams
 
-  const headerList = await headers()
-  const detectedCity = headerList.get("x-vercel-ip-city")
-  const activeCity = searchCity || detectedCity || "London"
+  let activeCity = searchCity
+
+  if (!activeCity) {
+    activeCity = await getClientLocation()
+  }
 
   const { data, error } = await getWeatherData(activeCity)
 
@@ -61,7 +62,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
     air: {
       uvindex: data?.currentConditions.uvindex,
       pressure: data?.currentConditions.pressure,
-      airquality: 23
+      aqieur: data?.currentConditions.aqieur
     },
     moon: {
       moonphase: data?.currentConditions.moonphase,

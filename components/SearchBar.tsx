@@ -23,10 +23,10 @@ export default function SearchBar({ hasError, className }: { hasError: boolean; 
           router.replace(`${pathname}?${params.toString()}`)
         })
       }
-    }, 500)
+    }, 1000)
 
     return () => clearTimeout(delayDebounceFn)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query])
 
   return (

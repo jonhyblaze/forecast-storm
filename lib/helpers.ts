@@ -1,3 +1,4 @@
+import { BadgeLevel } from "@/components/Badge"
 import { MoonphaseKey } from "@/components/Widgets/types"
 
 export function getMoonPhaseKey(value: number): MoonphaseKey {
@@ -29,4 +30,39 @@ export const formatForecastDate = (dateString: string) => {
     day: "numeric",
     month: "short",
   }).format(date)
+}
+
+export const getUVLevel = (uvindex: number | undefined) : LevelResult => {
+  if (uvindex === undefined || null) return { label: "No data" }
+
+  if (uvindex <= 2) return { level: 1, label: "Low" }
+  if (uvindex <= 5) return { level: 2, label: "Moderate" }
+  if (uvindex <= 7) return { level: 3, label: "High" }
+  if (uvindex <= 10) return { level: 4, label: "Very High" }
+  return { level: 5, label: "Extreme" }
+}
+
+export const getPressureLevel = (pressure: number | undefined) : LevelResult => {
+  if (pressure == null) return { label: "No data" }
+  if (pressure < 990) return { level: 1, label: "Very Low" }
+  if (pressure <= 1005) return { level: 2, label: "Low" }
+  if (pressure <= 1018) return { level: 3, label: "Normal" }
+  if (pressure <= 1030) return { level: 4, label: "High" }
+  return { level: 5, label: "Very High" }
+}
+
+export const getAirLevel = (airIndex: number | undefined): LevelResult => {
+  if (airIndex == null) return { label: "No data" }
+
+  if (airIndex <= 1) return { level: 1, label: "Perfect" }
+  if (airIndex <= 2) return { level: 2, label: "Good" }
+  if (airIndex <= 3) return { level: 3, label: "Moderate" }
+  if (airIndex <= 4) return { level: 4, label: "Poor" }
+  if (airIndex <= 5) return { level: 4, label: "Very Poor" }
+    else  return { level: 6, label: "Unhealthy" }
+}
+
+type LevelResult = {
+  level?: BadgeLevel
+  label: string
 }

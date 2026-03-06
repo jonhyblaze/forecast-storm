@@ -11,7 +11,7 @@ type CardProps = {
 
 export default function Card({ type, children, className }: CardProps) {
   return (
-    <div className={cn("bg-foreground/15 dark:bg-foreground/5 rounded-3xl p-6 pb-10 backdrop-blur-xl", className)}>
+    <div className={cn("bg-foreground/1 dark:bg-background/15 rounded-3xl p-6 pb-10 backdrop-blur-md border border-foreground/10 dark:border-background/10", className)}>
       {type !== "today" &&  <h2 className="475px:text-lg uppercase text-foreground/50">{type}</h2>}
       {children}
     </div>

@@ -1,8 +1,8 @@
 const API_KEY = process.env.VISUAL_CROSSING_API_KEY
 const BASE_URL = process.env.VISUAL_CROSSING_BASE_URL
 
-export const getWeatherData = async (city: string) => {
-  const url = `${BASE_URL}${city}?unitGroup=metric&key=${API_KEY}&contentType=json`
+export const getWeatherData = async (city: string = "Kyiv" ) => {
+  const url = `${BASE_URL}${city}?unitGroup=metric&key=${API_KEY}&contentType=json&elements=%2Baqieur`
 
   const res = await fetch(url)
 

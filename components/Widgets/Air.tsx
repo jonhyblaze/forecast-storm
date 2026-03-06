@@ -1,47 +1,13 @@
-import { Sun, Gauge, Waves } from "lucide-react"
 import Card, { Field } from "@/components/Card/Card"
-import { cn } from "@/lib/utils"
-import { ReactNode } from "react"
+import Badge from "@/components/Badge"
+import { Sun, Gauge, Waves } from "lucide-react"
 import { AirType } from "./types"
+import { getUVLevel, getPressureLevel, getAirLevel } from "@/lib/helpers"
 
-type LevelResult = {
-  level?: BadgeLevel
-  label: string
-}
-
-export default function Air({ data, className }: { data: AirType, className?: string }) {
-  const getUVLevel = (uvindex: number | undefined) : LevelResult => {
-    if (uvindex === undefined || null) return { label: "No data" }
-
-    if (uvindex <= 2) return { level: 1, label: "Low" }
-    if (uvindex <= 5) return { level: 2, label: "Moderate" }
-    if (uvindex <= 7) return { level: 3, label: "High" }
-    if (uvindex <= 10) return { level: 4, label: "Very High" }
-    return { level: 5, label: "Extreme" }
-  }
-
-  const getPressureLevel = (pressure: number | undefined) : LevelResult => {
-    if (pressure == null) return { label: "No data" }
-    if (pressure < 990) return { level: 1, label: "Very Low" }
-    if (pressure <= 1005) return { level: 2, label: "Low" }
-    if (pressure <= 1018) return { level: 3, label: "Normal" }
-    if (pressure <= 1030) return { level: 4, label: "High" }
-    return { level: 5, label: "Very High" }
-  }
-
-  const getAirLevel = (airIndex: number | undefined): LevelResult => {
-    if (airIndex == null) return { label: "No data" }
-
-    if (airIndex <= 20) return { level: 1, label: "Perfect" }
-    if (airIndex <= 40) return { level: 2, label: "Good" }
-    if (airIndex <= 60) return { level: 3, label: "Moderate" }
-    if (airIndex <= 80) return { level: 4, label: "Poor" }
-      else  return { level: 5, label: "Hazardous" }
-  }
-
+export default function Air({ data, className }: { data: AirType; className?: string }) {
   const uvLevel = getUVLevel(data.uvindex)
   const pressureLevel = getPressureLevel(data.pressure)
-  const airLevel = getAirLevel(data.airquality)
+  const airLevel = getAirLevel(data.aqieur)
 
   return (
     <Card type="air" className={className}>
@@ -54,43 +20,17 @@ export default function Air({ data, className }: { data: AirType, className?: st
         </li>
         <li className="flex items-center justify-between">
           <Field name="Pressure" Icon={Gauge} value={`${data.pressure}`} />
-          <Badge className="w-24" level={pressureLevel.level}>{pressureLevel.label}</Badge>
+          <Badge className="w-24" level={pressureLevel.level}>
+            {pressureLevel.label}
+          </Badge>
         </li>
         <li className="flex items-center justify-between">
-          <Field name="Air Quality" Icon={Waves} value={`${data.airquality}`} />
-          <Badge className="w-24" level={airLevel.level}>{airLevel.label}</Badge>
+          <Field name="Air Quality" Icon={Waves} value={`${data.aqieur}`} />
+          <Badge className="w-24" level={airLevel.level}>
+            {airLevel.label}
+          </Badge>
         </li>
       </ul>
     </Card>
-  )
-}
-
-type BadgeLevel = 1 | 2 | 3 | 4 | 5
-
-type BadgeProps = {
-  children: ReactNode
-  level?: BadgeLevel
-  className?: string
-}
-
-const Badge = ({
-  children,
-  className,
-  level = 1
-}: BadgeProps) => {
-  const variations: Record<BadgeLevel, string> = {
-    1: "bg-sky-500/75",
-    2: "bg-emerald-500/75",
-    3: "bg-amber-500/75",
-    4: "bg-red-500/65",
-    5: "bg-red-500/65"
-  }
-
-  const color = variations[level] ?? "bg-zinc-500"
-
-  return (
-    <div className={cn("text-sm leading-4 text-center rounded-full px-2 py-1", color, className)}>
-      {children}
-    </div>
   )
 }
