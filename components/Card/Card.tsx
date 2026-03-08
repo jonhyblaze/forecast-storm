@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 import { LucideIcon } from "lucide-react"
 
-type CardType = "conditions" | "air" | "sun" | "moon" | "wind" | "today" | "forecast"
+type CardType = "conditions" | "air" | "sun" | "moon" | "wind" | "today" | "forecast" | "skeleton"
 
 type CardProps = {
   type: CardType
@@ -10,9 +10,15 @@ type CardProps = {
 }
 
 export default function Card({ type, children, className }: CardProps) {
+  const renderCardTitle = () => {
+    if (type === "today" || type === "skeleton") return
+
+    else return <h2 className="475px:text-lg uppercase text-foreground/50">{type}</h2>
+  }
+
   return (
     <div className={cn("bg-foreground/1 dark:bg-background/15 rounded-3xl p-6 pb-10 backdrop-blur-md border border-foreground/10 dark:border-background/10", className)}>
-      {type !== "today" &&  <h2 className="475px:text-lg uppercase text-foreground/50">{type}</h2>}
+      {renderCardTitle()}
       {children}
     </div>
   )

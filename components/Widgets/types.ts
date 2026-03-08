@@ -75,9 +75,8 @@ export type AirType = {
 }
 
 export type MoonType = {
+  address: string
   moonphase: number
-  moonrise: string
-  moonset: string
 }
 
 export type NormalizedWeather = {

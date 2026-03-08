@@ -4,7 +4,7 @@ function SkeletonBlock({ className }: { className?: string }) {
   return <div className={cn("animate-pulse rounded-2xl bg-foreground/20", className)} />
 }
 
-function SkeletonCard({ className }: { className?: string }) {
+export function SkeletonCard({ className }: { className?: string }) {
   return (
     <div className={cn("min-h-96 rounded-2xl bg-foreground/25 p-6 flex flex-col gap-4", className)}>
       {/* Title */}

@@ -32,6 +32,11 @@ export const formatForecastDate = (dateString: string) => {
   }).format(date)
 }
 
+type LevelResult = {
+  level?: BadgeLevel
+  label: string
+}
+
 export const getUVLevel = (uvindex: number | undefined) : LevelResult => {
   if (uvindex === undefined || null) return { label: "No data" }
 
@@ -62,7 +67,7 @@ export const getAirLevel = (airIndex: number | undefined): LevelResult => {
     else  return { level: 6, label: "Unhealthy" }
 }
 
-type LevelResult = {
-  level?: BadgeLevel
-  label: string
+export const to24h = (time: string) => {
+  const date = new Date(`1970-01-01 ${time}`)
+  return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
 }

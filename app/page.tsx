@@ -65,9 +65,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
       aqieur: data?.currentConditions.aqieur
     },
     moon: {
+      address: data?.resolvedAddress,
       moonphase: data?.currentConditions.moonphase,
-      moonrise: "13:23:55",
-      moonset: "04:18:23"
     }
   }
 
