@@ -309,20 +309,20 @@ else: print('Waning Crescent')
 _weather_icon() {
   local icon="$1" cond="$2"
   case "$icon" in
-    clear-day)           echo "☀️"  ;;
-    clear-night)         echo "🌙"  ;;
-    partly-cloudy-day)   echo "⛅"  ;;
-    partly-cloudy-night) echo "🌤"  ;;
-    cloudy)              echo "☁️"  ;;
-    rain)                echo "🌧"  ;;
-    showers-day)         echo "🌦"  ;;
-    snow)                echo "❄️"  ;;
-    sleet)               echo "🌨"  ;;
-    wind)                echo "💨"  ;;
-    fog)                 echo "🌫"  ;;
-    thunder-rain)        echo "⛈"  ;;
-    thunder-showers-day) echo "🌩"  ;;
-    *)                   echo "🌡"  ;;
+    clear-day)           echo "☀️ "  ;;
+    clear-night)         echo "🌙 "  ;;
+    partly-cloudy-day)   echo "⛅ "  ;;
+    partly-cloudy-night) echo "🌤 "  ;;
+    cloudy)              echo "☁️ "  ;;
+    rain)                echo "🌧 "  ;;
+    showers-day)         echo "🌦 "  ;;
+    snow)                echo "❄️ "  ;;
+    sleet)               echo "🌨 "  ;;
+    wind)                echo "💨 "  ;;
+    fog)                 echo "🌫 "  ;;
+    thunder-rain)        echo "⛈ "  ;;
+    thunder-showers-day) echo "🌩 "  ;;
+    *)                   echo "🌡 "  ;;
   esac
 }
 
@@ -522,7 +522,7 @@ _render_forecast() {
   echo -e "${BOLD}${FG_LGRAY}  4-Day Forecast${RESET}"
   echo ""
   _box_top $W
-  _box_mid $W "${FG_DGRAY}  Day            High   Low    Precip${RESET}"
+  _box_mid $W "${FG_DGRAY}    Date       High Low   Precip${RESET}"
   _box_sep $W
   local i
   for i in 1 2 3 4; do
@@ -543,7 +543,7 @@ _render_forecast() {
     pp_r=$(_round "$pp")
     local bar
     bar=$(_hbar "$pp_r" "100" "8" "$FG_SKY")
-    _box_mid $W "  ${wi} ${FG_CREAM} $(printf '%-10s' "$dt")${RESET} ${FG_ORANGE}$(printf '%3d' "$tmax_r")°${RESET} ${FG_LBLUE}$(printf '%3d' "$tmin_r")°${RESET}  ${bar}${FG_DGRAY}${pp_r}%${RESET}"
+    _box_mid $W " ${wi}${FG_CREAM}$(printf '%-10s' "$dt")${RESET} ${FG_ORANGE}$(printf '%3d' "$tmax_r")°${RESET} ${FG_LBLUE}$(printf '%3d' "$tmin_r")°${RESET}  ${bar} ${FG_DGRAY}$(printf '%3d' "$pp_r")%${RESET}"
   done
   _box_bot $W
   echo ""
