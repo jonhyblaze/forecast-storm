@@ -283,12 +283,12 @@ _compass() {
 }
 
 _moon_icon() {
-  # moonphase is 0..1 float
+  # moonphase is 0..1 float — single-width geometric symbols
   local phase="$1"
   local p
   p=$(python3 -c "p=float('$phase'); print(int(p*8))" 2>/dev/null || echo 4)
-  local icons=('🌑' '🌒' '🌓' '🌔' '🌕' '🌖' '🌗' '🌘' '🌑')
-  echo "${icons[$p]:-🌕}"
+  local icons=('○' '◔' '◑' '◕' '●' '◕' '◐' '◔' '○')
+  echo "${icons[$p]:-●}"
 }
 
 _moon_name() {
@@ -307,22 +307,23 @@ else: print('Waning Crescent')
 }
 
 _weather_icon() {
-  local icon="$1" cond="$2"
+  # single-width geometric Unicode — no emoji, predictable column width
+  local icon="$1"
   case "$icon" in
-    clear-day)           echo "☀️ "  ;;
-    clear-night)         echo "🌙 "  ;;
-    partly-cloudy-day)   echo "⛅ "  ;;
-    partly-cloudy-night) echo "🌤 "  ;;
-    cloudy)              echo "☁️ "  ;;
-    rain)                echo "🌧 "  ;;
-    showers-day)         echo "🌦 "  ;;
-    snow)                echo "❄️ "  ;;
-    sleet)               echo "🌨 "  ;;
-    wind)                echo "💨 "  ;;
-    fog)                 echo "🌫 "  ;;
-    thunder-rain)        echo "⛈ "  ;;
-    thunder-showers-day) echo "🌩 "  ;;
-    *)                   echo "🌡 "  ;;
+    clear-day)           echo "◎"  ;;
+    clear-night)         echo "◗"  ;;
+    partly-cloudy-day)   echo "◑"  ;;
+    partly-cloudy-night) echo "◐"  ;;
+    cloudy)              echo "▓"  ;;
+    rain)                echo "≋"  ;;
+    showers-day)         echo "≋"  ;;
+    snow)                echo "⊛"  ;;
+    sleet)               echo "≈"  ;;
+    wind)                echo "≋"  ;;
+    fog)                 echo "≡"  ;;
+    thunder-rain)        echo "◆"  ;;
+    thunder-showers-day) echo "◆"  ;;
+    *)                   echo "◌"  ;;
   esac
 }
 
@@ -446,6 +447,35 @@ _box_mid()    { local w="$1" content="$2"
   printf "│ "; echo -ne "$content"; printf "%*s│\n" "$pad" ""; }
 _box_empty()  { local w="$1"; printf "│%*s│\n" $((w-2)) ""; }
 
+# title embedded in top border: ┌── LABEL ────────────────┐
+_box_title()  { local w="$1" title="$2"
+  local tlen="${#title}"
+  local dashes=$(( w - tlen - 6 ))
+  (( dashes < 1 )) && dashes=1
+  printf "┌── ${FG_LGRAY}${BOLD}%s${RESET} " "$title"
+  printf '─%.0s' $(seq 1 $dashes)
+  printf "┐\n"; }
+
+# print two captured widget outputs side by side, padding left to lw cols
+_cols() {
+  local lw="$1" rw="$2" left="$3" right="$4"
+  local -a la ra
+  while IFS= read -r line; do la+=("$line"); done <<< "$left"
+  while IFS= read -r line; do ra+=("$line"); done <<< "$right"
+  local n=$(( ${#la[@]} > ${#ra[@]} ? ${#la[@]} : ${#ra[@]} ))
+  local i
+  for (( i=0; i<n; i++ )); do
+    local l="${la[$i]:-}" r="${ra[$i]:-}"
+    local vis vlen pad
+    vis=$(printf '%s' "$l" | sed 's/\x1b\[[0-9;]*m//g')
+    vlen=${#vis}
+    pad=$(( lw - vlen ))
+    (( pad < 0 )) && pad=0
+    printf "%s%*s  %s\n" "$l" "$pad" "" "$r"
+  done
+  echo ""
+}
+
 _hbar() {
   # _hbar VALUE MAX WIDTH COLOR
   local val="$1" max="$2" width="$3" color="${4:-$GREEN}"
@@ -461,11 +491,15 @@ _hbar() {
 
 # ─── banner ───────────────────────────────────────────────────
 _banner() {
-  echo -e ""
-  echo -e "${FG_SKY}${BOLD}  ╔═══════════════════════════════╗${RESET}"
-  echo -e "${FG_SKY}${BOLD}  ║ ${FG_CREAM}⛈  Forecast CLI${FG_SKY}  v${VERSION}║${RESET}"
-  echo -e "${FG_SKY}${BOLD}  ╚═══════════════════════════════╝${RESET}"
+  local w=98
   echo ""
+  printf "${FG_DGRAY}"
+  printf '─%.0s' $(seq 1 $w)
+  printf "${RESET}\n"
+  printf "  ${FG_SKY}${BOLD}FORECAST STORM${RESET}  ${FG_DGRAY}v${VERSION}${RESET}\n"
+  printf "${FG_DGRAY}"
+  printf '─%.0s' $(seq 1 $w)
+  printf "${RESET}\n\n"
 }
 
 # ─── section: TODAY ───────────────────────────────────────────
@@ -486,7 +520,7 @@ _render_today() {
   desc=$(echo "$data"      | jq -r '.days[0].description // ""')
 
   local wi
-  wi=$(_weather_icon "$icon" "$cond")
+  wi=$(_weather_icon "$icon")
   local temp_r feelslike_r tmax_r tmin_r hum_r
   temp_r=$(_round "$temp")
   feelslike_r=$(_round "$feelslike")
@@ -494,35 +528,28 @@ _render_today() {
   tmin_r=$(_round "$tmin")
   hum_r=$(_round "$hum")
 
-  local W=52
-  _box_top $W
-  _box_mid $W "${BOLD}${FG_CREAM} $wi  $city${RESET}"
+  local W=48
+  _box_title $W "TODAY"
+  _box_mid $W "${FG_CREAM}${BOLD} ${wi}  ${city}${RESET}"
   _box_mid $W "${FG_DGRAY} $(_today_label)${RESET}"
   _box_sep $W
-  _box_mid $W "${FG_SKY}${BOLD}  $(printf '%3d' "$temp_r")°C${RESET}  ${FG_GRAY}feels like ${feelslike_r}°C${RESET}"
-  _box_mid $W "${FG_LGRAY}  ↑ ${tmax_r}°C  ↓ ${tmin_r}°C   💧 ${hum_r}%${RESET}"
-  if [[ -n "$cond" ]]; then
-    _box_mid $W "${FG_GRAY}  ${cond}${RESET}"
-  fi
+  _box_mid $W " ${FG_SKY}${BOLD}$(printf '%3d' "$temp_r")°C${RESET}  ${FG_GRAY}feels $(printf '%2d' "$feelslike_r")°${RESET}  ${FG_ORANGE}↑$(printf '%2d' "$tmax_r")°${RESET}  ${FG_LBLUE}↓$(printf '%2d' "$tmin_r")°${RESET}  ${FG_TEAL}~${hum_r}%${RESET}"
+  [[ -n "$cond" ]] && _box_mid $W "${FG_LGRAY} ${cond}${RESET}"
   if [[ -n "$desc" ]]; then
-    # word-wrap desc to width-6 chars
     local maxw=$(( W - 6 ))
     while IFS= read -r line; do
-      _box_mid $W "${FG_DGRAY}  ${line}${RESET}"
+      _box_mid $W "${FG_DGRAY} ${line}${RESET}"
     done < <(echo "$desc" | fold -s -w "$maxw")
   fi
   _box_bot $W
-  echo ""
 }
 
 # ─── section: FORECAST ────────────────────────────────────────
 _render_forecast() {
   local data="$1"
-  local W=52
-  echo -e "${BOLD}${FG_LGRAY}  4-Day Forecast${RESET}"
-  echo ""
-  _box_top $W
-  _box_mid $W "${FG_DGRAY}    Date       High Low   Precip${RESET}"
+  local W=48
+  _box_title $W "FORECAST"
+  _box_mid $W "${FG_DGRAY}    Date       High  Low   Rain${RESET}"
   _box_sep $W
   local i
   for i in 1 2 3 4; do
@@ -535,18 +562,17 @@ _render_forecast() {
     tmin=$(echo "$day" | jq -r '.tempmin // 0')
     pp=$(echo "$day"   | jq -r '.precipprob // 0')
     icon=$(echo "$day" | jq -r '.icon // "cloudy"')
-    wi=$(_weather_icon "$icon" "")
+    wi=$(_weather_icon "$icon")
     dt=$(_fmt_date "$dt")
     local tmax_r tmin_r pp_r
     tmax_r=$(_round "$tmax")
     tmin_r=$(_round "$tmin")
     pp_r=$(_round "$pp")
     local bar
-    bar=$(_hbar "$pp_r" "100" "8" "$FG_SKY")
-    _box_mid $W " ${wi}${FG_CREAM}$(printf '%-10s' "$dt")${RESET} ${FG_ORANGE}$(printf '%3d' "$tmax_r")°${RESET} ${FG_LBLUE}$(printf '%3d' "$tmin_r")°${RESET}  ${bar} ${FG_DGRAY}$(printf '%3d' "$pp_r")%${RESET}"
+    bar=$(_hbar "$pp_r" "100" "6" "$FG_SKY")
+    _box_mid $W " ${wi}  ${FG_CREAM}$(printf '%-10s' "$dt")${RESET} ${FG_ORANGE}$(printf '%3d' "$tmax_r")°${RESET}  ${FG_LBLUE}$(printf '%3d' "$tmin_r")°${RESET}  ${bar} ${FG_DGRAY}$(printf '%3d' "$pp_r")%${RESET}"
   done
   _box_bot $W
-  echo ""
 }
 
 # ─── section: WIND ────────────────────────────────────────────
@@ -567,42 +593,24 @@ _render_wind() {
   local rose
   rose=$(_wind_rose "$dir")
 
-  local W=52
-  echo -e "${BOLD}${FG_LGRAY}  Wind${RESET}"
-  echo ""
-  _box_top $W
-
+  local W=48
   local spd_r gust_r
   spd_r=$(_round "$spd")
   gust_r=$(_round "$gust")
 
-  # Draw wind rose side-by-side with stats
-  local rose_lines=()
-  while IFS= read -r line; do
-    rose_lines+=("$line")
-  done <<< "$rose"
+  local -a rose_lines
+  while IFS= read -r line; do rose_lines+=("$line"); done <<< "$rose"
+  while (( ${#rose_lines[@]} < 5 )); do rose_lines+=("       "); done
 
-  local stats=(
-    "${FG_CREAM}${BOLD} Speed${RESET}   ${FG_TEAL}${spd_ms} m/s${RESET} ${FG_DGRAY}(${spd_r} km/h)${RESET}"
-    "${FG_CREAM}${BOLD} Gusts${RESET}   ${FG_ORANGE}${gust_ms} m/s${RESET} ${FG_DGRAY}(${gust_r} km/h)${RESET}"
-    "${FG_CREAM}${BOLD} Dir${RESET}     ${FG_GOLD}${compass}${RESET} ${FG_DGRAY}(${dir}°)${RESET}"
-    ""
-    "${FG_DGRAY} Rose (N=up)${RESET}"
-  )
-
-  # pad rose_lines to 5
-  while (( ${#rose_lines[@]} < 5 )); do rose_lines+=("     "); done
-
-  _box_mid $W "${stats[0]}"
-  _box_mid $W "${stats[1]}"
-  _box_mid $W "${stats[2]}"
+  _box_title $W "WIND"
+  _box_mid $W " ${FG_DGRAY}Speed${RESET}    ${FG_TEAL}${spd_ms} m/s${RESET}   ${FG_DGRAY}(${spd_r} km/h)${RESET}"
+  _box_mid $W " ${FG_DGRAY}Gusts${RESET}    ${FG_ORANGE}${gust_ms} m/s${RESET}   ${FG_DGRAY}(${gust_r} km/h)${RESET}"
+  _box_mid $W " ${FG_DGRAY}Dir${RESET}      ${FG_GOLD}${compass}${RESET}   ${FG_DGRAY}(${dir}°)${RESET}"
   _box_sep $W
-  _box_mid $W "${FG_DGRAY} Compass${RESET}"
   for l in "${rose_lines[@]}"; do
     _box_mid $W "   ${FG_TEAL}${l}${RESET}"
   done
   _box_bot $W
-  echo ""
 }
 
 # ─── section: CONDITIONS ──────────────────────────────────────
@@ -628,18 +636,14 @@ _render_conditions() {
   hum_r=$(_round "$hum")
   vis_r=$(_round "$vis")
 
-  local W=52
-  echo -e "${BOLD}${FG_LGRAY}  Conditions${RESET}"
-  echo ""
-  _box_top $W
-  local max_vis=20
-  _box_mid $W " 🌂 Precip prob   ${FG_SKY}${pp_r}%${RESET}   $(_hbar "$pp_r" "100" "12" "$FG_SKY")"
-  _box_mid $W " 💧 Precip        ${FG_LBLUE}${precip_r} mm${RESET}"
-  _box_mid $W " ☁️  Cloud cover   ${FG_GRAY}${cloud_r}%${RESET}    $(_hbar "$cloud_r" "100" "12" "$FG_GRAY")"
-  _box_mid $W " 💦 Humidity      ${FG_CYAN}${hum_r}%${RESET}    $(_hbar "$hum_r" "100" "12" "$FG_CYAN")"
-  _box_mid $W " 👁  Visibility   ${FG_LGRAY}${vis_r} km${RESET}   $(_hbar "$vis_r" "$max_vis" "12" "$FG_LGRAY")"
+  local W=48 max_vis=20
+  _box_title $W "CONDITIONS"
+  _box_mid $W " ${FG_DGRAY}Precip prob${RESET}    ${FG_SKY}$(printf '%3d' "$pp_r")%${RESET}  $(_hbar "$pp_r" "100" "10" "$FG_SKY")"
+  _box_mid $W " ${FG_DGRAY}Precip${RESET}         ${FG_LBLUE}${precip_r} mm${RESET}"
+  _box_mid $W " ${FG_DGRAY}Cloud cover${RESET}    ${FG_GRAY}$(printf '%3d' "$cloud_r")%${RESET}  $(_hbar "$cloud_r" "100" "10" "$FG_GRAY")"
+  _box_mid $W " ${FG_DGRAY}Humidity${RESET}       ${FG_CYAN}$(printf '%3d' "$hum_r")%${RESET}  $(_hbar "$hum_r" "100" "10" "$FG_CYAN")"
+  _box_mid $W " ${FG_DGRAY}Visibility${RESET}     ${FG_LGRAY}$(printf '%3d' "$vis_r") km${RESET}  $(_hbar "$vis_r" "$max_vis" "10" "$FG_LGRAY")"
   _box_bot $W
-  echo ""
 }
 
 # ─── section: AIR ─────────────────────────────────────────────
@@ -661,14 +665,11 @@ _render_air() {
   press_lv=$(_pressure_level "$press_r")
   uv_color=$(_uv_color "$uv_r")
 
-  local W=52
-  echo -e "${BOLD}${FG_LGRAY}  Air Quality & Atmosphere${RESET}"
-  echo ""
-  _box_top $W
-  _box_mid $W " ☀️  UV Index      ${uv_color}${BOLD}${uv_r}${RESET}  ${FG_DGRAY}(${uv_lv})${RESET}  $(_hbar "$uv_r" "12" "12" "$uv_color")"
-  _box_mid $W " 🌡  Pressure     ${FG_PINK}${press_r} hPa${RESET}  ${FG_DGRAY}(${press_lv})${RESET}"
+  local W=48
+  _box_title $W "AIR"
+  _box_mid $W " ${FG_DGRAY}UV Index${RESET}       ${uv_color}${BOLD}$(printf '%2d' "$uv_r")${RESET}  ${FG_DGRAY}${uv_lv}${RESET}  $(_hbar "$uv_r" "12" "10" "$uv_color")"
+  _box_mid $W " ${FG_DGRAY}Pressure${RESET}       ${FG_PINK}${press_r} hPa${RESET}  ${FG_DGRAY}${press_lv}${RESET}"
   _box_bot $W
-  echo ""
 }
 
 # ─── section: SUN ─────────────────────────────────────────────
@@ -683,17 +684,14 @@ _render_sun() {
   rise=$(echo "$rise" | cut -c1-5)
   set=$(echo "$set"   | cut -c1-5)
 
-  local W=52
+  local W=48
   local icon_sunrise="\ue34c"
   local icon_sunset="\ue34d"
 
-  echo -e "${BOLD}${FG_LGRAY}  Sun${RESET}"
-  echo ""
-  _box_top $W
-  _box_mid $W "  ${icon_sunrise} Sunrise   ${FG_GOLD}${rise}${RESET}"
-  _box_mid $W "  ${icon_sunset} Sunset    ${FG_ORANGE}${set}${RESET}"
+  _box_title $W "SUN"
+  _box_mid $W " ${FG_GOLD}${icon_sunrise}${RESET}  ${FG_DGRAY}Sunrise${RESET}   ${FG_GOLD}${rise}${RESET}"
+  _box_mid $W " ${FG_ORANGE}${icon_sunset}${RESET}  ${FG_DGRAY}Sunset${RESET}    ${FG_ORANGE}${set}${RESET}"
   _box_bot $W
-  echo ""
 }
 
 # ─── section: MOON ────────────────────────────────────────────
@@ -724,16 +722,13 @@ print(f'{illum:.0f}')
 " 2>/dev/null || echo "—")
   fi
 
-  local W=52
-  echo -e "${BOLD}${FG_LGRAY}  Moon${RESET}"
-  echo ""
-  _box_top $W
-  _box_mid $W "  ${mi}  ${FG_CREAM}${mn}${RESET}"
-  _box_mid $W "  ${FG_DGRAY}Illumination${RESET}  ${FG_GOLD}${illum}%${RESET}"
-  [[ "$moonrise" != "—" ]] && _box_mid $W "  🌕 Moonrise    ${FG_LGRAY}${moonrise}${RESET}"
-  [[ "$moonset"  != "—" ]] && _box_mid $W "  🌑 Moonset     ${FG_DGRAY}${moonset}${RESET}"
+  local W=48
+  _box_title $W "MOON"
+  _box_mid $W " ${FG_CREAM}${mi}${RESET}  ${FG_CREAM}${mn}${RESET}"
+  _box_mid $W " ${FG_DGRAY}Illumination${RESET}   ${FG_GOLD}${illum}%${RESET}"
+  [[ "$moonrise" != "—" ]] && _box_mid $W " ${FG_DGRAY}Moonrise${RESET}   ${FG_LGRAY}↑ ${moonrise}${RESET}"
+  [[ "$moonset"  != "—" ]] && _box_mid $W " ${FG_DGRAY}Moonset${RESET}    ${FG_DGRAY}↓ ${moonset}${RESET}"
   _box_bot $W
-  echo ""
 }
 
 # ─── plain-text output (for curl/wget pipe) ───────────────────
@@ -794,19 +789,32 @@ EOF
 # ─── full TUI render ──────────────────────────────────────────
 _render_tui() {
   local data="$1" astro="$2"
+  local W=48
   clear
   _banner
-  _render_today "$data"
-  _render_forecast "$data"
 
-  # Two columns: left=wind, right=sun+moon stacked
-  _render_wind "$data"
-  _render_sun "$data"
-  _render_moon "$data" "$astro"
-  _render_conditions "$data"
-  _render_air "$data"
+  # capture each widget; render in two-column pairs
+  local col_today col_forecast col_wind col_cond col_air col_sun col_moon
+  col_today=$(_render_today      "$data")
+  col_forecast=$(_render_forecast "$data")
+  col_wind=$(_render_wind        "$data")
+  col_cond=$(_render_conditions  "$data")
+  col_air=$(_render_air          "$data")
+  col_sun=$(_render_sun          "$data")
+  col_moon=$(_render_moon        "$data" "$astro")
 
-  echo -e "${FG_DGRAY}  Data: Visual Crossing / Open-Meteo / WeatherAPI  •  Forecast CLI v${VERSION}${RESET}"
+  # row 1: today | forecast
+  _cols $W $W "$col_today" "$col_forecast"
+
+  # row 2: wind | conditions + air stacked
+  local col_cond_air
+  printf -v col_cond_air '%s\n%s' "$col_cond" "$col_air"
+  _cols $W $W "$col_wind" "$col_cond_air"
+
+  # row 3: sun | moon
+  _cols $W $W "$col_sun" "$col_moon"
+
+  echo -e "${FG_DGRAY}  Visual Crossing / Open-Meteo / WeatherAPI  ·  v${VERSION}${RESET}"
   echo ""
 }
 
