@@ -684,9 +684,8 @@ _render_sun() {
   set=$(echo "$set"   | cut -c1-5)
 
   local W=52
-
- local icon_sunrise="\ue34c"
- local icon_sunset="\ue34d
+  local icon_sunrise="\ue34c"
+  local icon_sunset="\ue34d"
 
   echo -e "${BOLD}${FG_LGRAY}  Sun${RESET}"
   echo ""
@@ -751,7 +750,7 @@ _render_plain() {
   tmin=$(_round "$(echo "$data"  | jq -r '.days[0].tempmin // 0')")
   feel=$(_round "$(echo "$today" | jq -r '.feelslike // 0')")
   hum=$(_round  "$(echo "$today" | jq -r '.humidity // 0')")
-  pp=$(_round   "$(echo "$today" | jq -r '.precipprob // ('"$(echo "$data" | jq '.days[0].precipprob // 0')"')')")
+  pp=$(_round "$(echo "$data" | jq -r '(.currentConditions.precipprob // .days[0].precipprob // 0)')")
   wind=$(echo "$today"  | jq -r '.windspeed // 0')
   gust=$(echo "$today"  | jq -r '.windgust // 0')
   dir=$(_compass "$(echo "$today" | jq -r '.winddir // 0')")
