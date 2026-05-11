@@ -499,7 +499,7 @@ _render_today() {
   _box_mid $W "${BOLD}${FG_CREAM} $wi  $city${RESET}"
   _box_mid $W "${FG_DGRAY} $(_today_label)${RESET}"
   _box_sep $W
-  _box_mid $W "🌡️ ${FG_SKY}${BOLD}  $(printf '%3d' "$temp_r")°C${RESET}  ${FG_GRAY}feels like ${feelslike_r}°C${RESET}"
+  _box_mid $W "${FG_SKY}${BOLD}  $(printf '%3d' "$temp_r")°C${RESET}  ${FG_GRAY}feels like ${feelslike_r}°C${RESET}"
   _box_mid $W "${FG_LGRAY}  ↑ ${tmax_r}°C  ↓ ${tmin_r}°C   💧 ${hum_r}%${RESET}"
   if [[ -n "$cond" ]]; then
     _box_mid $W "${FG_GRAY}  ${cond}${RESET}"
@@ -522,7 +522,7 @@ _render_forecast() {
   echo -e "${BOLD}${FG_LGRAY}  4-Day Forecast${RESET}"
   echo ""
   _box_top $W
-  _box_mid $W "${FG_DGRAY}  Day            High    Low    Precip${RESET}"
+  _box_mid $W "${FG_DGRAY}  Day            High   Low    Precip${RESET}"
   _box_sep $W
   local i
   for i in 1 2 3 4; do
