@@ -463,7 +463,7 @@ _hbar() {
 _banner() {
   echo -e ""
   echo -e "${FG_SKY}${BOLD}  ╔═══════════════════════════════╗${RESET}"
-  echo -e "${FG_SKY}${BOLD}  ║ ${FG_CREAM}⛈  forecast-storm${FG_SKY}  v${VERSION}   ║${RESET}"
+  echo -e "${FG_SKY}${BOLD}  ║ ${FG_CREAM}⛈  Forecast CLI${FG_SKY}  v${VERSION}   ║${RESET}"
   echo -e "${FG_SKY}${BOLD}  ╚═══════════════════════════════╝${RESET}"
   echo ""
 }
@@ -684,11 +684,15 @@ _render_sun() {
   set=$(echo "$set"   | cut -c1-5)
 
   local W=52
+
+ local icon_sunrise="\ue34c"
+ local icon_sunset="\ue34d
+
   echo -e "${BOLD}${FG_LGRAY}  Sun${RESET}"
   echo ""
   _box_top $W
-  _box_mid $W "  🌅 Sunrise   ${FG_GOLD}${rise}${RESET}"
-  _box_mid $W "  🌇 Sunset    ${FG_ORANGE}${set}${RESET}"
+  _box_mid $W "  ${icon_sunrise} Sunrise   ${FG_GOLD}${rise}${RESET}"
+  _box_mid $W "  ${icon_sunset} Sunset    ${FG_ORANGE}${set}${RESET}"
   _box_bot $W
   echo ""
 }
