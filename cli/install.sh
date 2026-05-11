@@ -6,8 +6,16 @@
 set -euo pipefail
 
 BINARY_URL="https://forecast-storm.vercel.app/cli"
-INSTALL_DIR="/usr/local/bin"
 BINARY="forecast-storm"
+
+# Pick install dir: Homebrew prefix (macOS) > /usr/local/bin > ~/.local/bin
+if command -v brew &>/dev/null; then
+  INSTALL_DIR="$(brew --prefix)/bin"
+elif [[ -d "/usr/local/bin" && -w "/usr/local/bin" ]]; then
+  INSTALL_DIR="/usr/local/bin"
+else
+  INSTALL_DIR="${HOME}/.local/bin"
+fi
 
 # Colors
 RED="\033[31m" GREEN="\033[32m" YELLOW="\033[33m"
@@ -33,7 +41,7 @@ if ! command -v jq &>/dev/null; then
   if command -v apt-get &>/dev/null; then
     sudo apt-get install -y jq -q || _err "could not install jq. Install manually: https://jqlang.github.io/jq/"
   elif command -v brew &>/dev/null; then
-    brew install jq
+    brew install jq || _err "could not install jq. Run: brew install jq"
   elif command -v dnf &>/dev/null; then
     sudo dnf install -y jq
   elif command -v yum &>/dev/null; then
@@ -46,19 +54,25 @@ if ! command -v jq &>/dev/null; then
 fi
 _ok "jq found"
 
-# Determine install dir
-DEST="${INSTALL_DIR}/${BINARY}"
+# Ensure install dir exists and is writable; fall back to ~/.local/bin
+mkdir -p "$INSTALL_DIR"
 if [[ ! -w "$INSTALL_DIR" ]]; then
-  # Try user local
   INSTALL_DIR="${HOME}/.local/bin"
-  DEST="${INSTALL_DIR}/${BINARY}"
   mkdir -p "$INSTALL_DIR"
-  _info "No write access to /usr/local/bin — installing to ${INSTALL_DIR}"
-  # Add to PATH hint
-  if [[ ":$PATH:" != *":${INSTALL_DIR}:"* ]]; then
-    echo -e "${YELLOW}  ⚠  Add to your shell profile:${RESET}"
-    echo    "     export PATH=\"\$HOME/.local/bin:\$PATH\""
+  _info "No write access — installing to ${INSTALL_DIR}"
+fi
+
+DEST="${INSTALL_DIR}/${BINARY}"
+
+# Warn if the chosen dir isn't in PATH yet
+if [[ ":$PATH:" != *":${INSTALL_DIR}:"* ]]; then
+  echo -e "${YELLOW}  ⚠  ${INSTALL_DIR} is not in your PATH.${RESET}"
+  if [[ "$(uname)" == "Darwin" ]]; then
+    echo    "     Add to ~/.zshrc (or ~/.bash_profile):"
+  else
+    echo    "     Add to ~/.bashrc:"
   fi
+  echo    "     export PATH=\"${INSTALL_DIR}:\$PATH\""
 fi
 
 # Download
