@@ -891,7 +891,7 @@ _show_help() {
 
   USAGE
     forecast-storm [OPTIONS] [CITY]
-    curl -fsSL https://forecast-storm-pwa.vercel.app/api/cli | bash -s -- [CITY]
+    curl -fsSL https://forecast-storm.vercel.app/api/cli | bash -s -- [CITY]
 
   OPTIONS
     -h, --help          Show this help
@@ -911,7 +911,7 @@ _show_help() {
     forecast-storm --refresh Berlin    # Skip cache
 
   CURL ONE-LINER
-    curl -fsSL https://forecast-storm-pwa.vercel.app/api/cli | bash -s -- London
+    curl -fsSL https://forecast-storm.vercel.app/api/cli | bash -s -- London
 
   ENVIRONMENT
     VISUAL_CROSSING_KEY   Visual Crossing API key

@@ -12,10 +12,10 @@ Falls back to **Open-Meteo** (no API key) automatically — you get real weather
 
 ```bash
 # curl
-curl -fsSL https://forecast-storm-pwa.vercel.app/install.sh | bash
+curl -fsSL https://forecast-storm.vercel.app/install.sh | bash
 
 # wget
-wget -qO- https://forecast-storm-pwa.vercel.app/install.sh | bash
+wget -qO- https://forecast-storm.vercel.app/install.sh | bash
 ```
 
 ### Homebrew (macOS / Linux)
