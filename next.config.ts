@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  outputFileTracingIncludes: {
+    "/cli": ["./cli/forecast-storm"],
+    "/install": ["./cli/install.sh"],
+  },
 };
 
 export default nextConfig;

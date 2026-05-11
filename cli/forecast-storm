@@ -1,0 +1,1009 @@
+#!/usr/bin/env bash
+# ╔══════════════════════════════════════════════════════════════╗
+# ║            forecast-storm — terminal weather TUI             ║
+# ║  curl -fsSL https://forecast.storm/install | bash           ║
+# ║  wget -qO- https://forecast.storm/install | bash            ║
+# ╚══════════════════════════════════════════════════════════════╝
+# SPDX-License-Identifier: MIT
+# https://github.com/jonhyblaze/forecast-storm
+
+set -euo pipefail
+
+# ─── version ───────────────────────────────────────────────────
+VERSION="1.0.0"
+
+# ─── color / style escapes ────────────────────────────────────
+if [ -t 1 ] || [ "${FORCE_COLOR:-}" = "1" ]; then
+  BOLD="\033[1m"
+  DIM="\033[2m"
+  ITALIC="\033[3m"
+  RESET="\033[0m"
+  BLACK="\033[30m"
+  RED="\033[31m"
+  GREEN="\033[32m"
+  YELLOW="\033[33m"
+  BLUE="\033[34m"
+  MAGENTA="\033[35m"
+  CYAN="\033[36m"
+  WHITE="\033[37m"
+  BG_BLACK="\033[40m"
+  BG_BLUE="\033[44m"
+  BG_CYAN="\033[46m"
+  BG_WHITE="\033[47m"
+  BG_DARK="\033[48;5;234m"
+  BG_CARD="\033[48;5;236m"
+  FG_GRAY="\033[38;5;245m"
+  FG_LGRAY="\033[38;5;250m"
+  FG_DGRAY="\033[38;5;240m"
+  FG_ORANGE="\033[38;5;214m"
+  FG_GOLD="\033[38;5;220m"
+  FG_SKY="\033[38;5;117m"
+  FG_TEAL="\033[38;5;86m"
+  FG_CYAN="\033[38;5;87m"
+  FG_PINK="\033[38;5;213m"
+  FG_LBLUE="\033[38;5;153m"
+  FG_LGREEN="\033[38;5;120m"
+  FG_CREAM="\033[38;5;230m"
+else
+  BOLD="" DIM="" ITALIC="" RESET=""
+  BLACK="" RED="" GREEN="" YELLOW="" BLUE="" MAGENTA="" CYAN="" WHITE=""
+  BG_BLACK="" BG_BLUE="" BG_CYAN="" BG_WHITE="" BG_DARK="" BG_CARD=""
+  FG_GRAY="" FG_LGRAY="" FG_DGRAY="" FG_ORANGE="" FG_GOLD="" FG_SKY=""
+  FG_TEAL="" FG_CYAN="" FG_PINK="" FG_LBLUE="" FG_LGREEN="" FG_CREAM=""
+fi
+
+# ─── api keys (env or config file) ────────────────────────────
+CONFIG_FILE="${HOME}/.config/forecast-storm/config"
+_load_config() {
+  if [[ -f "$CONFIG_FILE" ]]; then
+    # shellcheck source=/dev/null
+    source "$CONFIG_FILE"
+  fi
+}
+_load_config
+
+VISUAL_CROSSING_KEY="${VISUAL_CROSSING_KEY:-}"
+WEATHERAPI_KEY="${WEATHERAPI_KEY:-}"
+
+# ─── constants ─────────────────────────────────────────────────
+VISUAL_CROSSING_BASE="https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline"
+WEATHERAPI_BASE="https://api.weatherapi.com/v1"
+IPGEO_BASE="https://api.ipgeolocation.io/ipgeo"
+CACHE_DIR="${HOME}/.cache/forecast-storm"
+CACHE_TTL=900  # 15 min
+
+# ─── helpers ──────────────────────────────────────────────────
+_die()   { echo -e "${RED}${BOLD}error:${RESET} $*" >&2; exit 1; }
+_warn()  { echo -e "${YELLOW}${BOLD}warn:${RESET}  $*" >&2; }
+_info()  { echo -e "${FG_GRAY}$*${RESET}"; }
+
+_dep_check() {
+  local missing=()
+  for cmd in curl jq; do
+    command -v "$cmd" &>/dev/null || missing+=("$cmd")
+  done
+  if (( ${#missing[@]} )); then
+    _die "missing dependencies: ${missing[*]}\n  Install with: apt install ${missing[*]}  OR  brew install ${missing[*]}"
+  fi
+}
+
+_cache_key() {
+  echo "$1" | tr ' /' '__' | tr '[:upper:]' '[:lower:]'
+}
+
+_cache_get() {
+  local key="$1" file
+  file="$CACHE_DIR/$(_cache_key "$key").json"
+  if [[ -f "$file" ]]; then
+    local age=$(( $(date +%s) - $(date -r "$file" +%s 2>/dev/null || echo 0) ))
+    (( age < CACHE_TTL )) && cat "$file" && return 0
+  fi
+  return 1
+}
+
+_cache_set() {
+  local key="$1" data="$2"
+  mkdir -p "$CACHE_DIR"
+  echo "$data" > "$CACHE_DIR/$(_cache_key "$key").json"
+}
+
+_http_get() {
+  local url="$1"
+  curl -fsSL --max-time 10 \
+       -H "User-Agent: forecast-storm/$VERSION" \
+       "$url" 2>/dev/null
+}
+
+# ─── spinner ──────────────────────────────────────────────────
+_spinner_start() {
+  local msg="${1:-loading}"
+  echo -ne "${FG_GRAY}  ${msg}...${RESET}"
+  ( while true; do
+      for s in '⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏'; do
+        echo -ne "\r${FG_TEAL}${s}${RESET} ${FG_GRAY}${msg}...${RESET}"
+        sleep 0.08
+      done
+    done ) &
+  _SPINNER_PID=$!
+  disown "$_SPINNER_PID" 2>/dev/null || true
+}
+
+_spinner_stop() {
+  if [[ -n "${_SPINNER_PID:-}" ]]; then
+    kill "$_SPINNER_PID" 2>/dev/null || true
+    wait "$_SPINNER_PID" 2>/dev/null || true
+    _SPINNER_PID=""
+    echo -ne "\r\033[2K"
+  fi
+}
+trap '_spinner_stop' EXIT
+
+# ─── location ─────────────────────────────────────────────────
+_get_ip_city() {
+  local data
+  data=$(_http_get "https://ipapi.co/json/") || return 1
+  echo "$data" | jq -r '.city // empty' 2>/dev/null
+}
+
+# ─── weather API ──────────────────────────────────────────────
+_fetch_weather() {
+  local city="$1"
+  local cache_key="vc_${city}"
+  local cached
+  if cached=$(_cache_get "$cache_key" 2>/dev/null); then
+    echo "$cached"
+    return 0
+  fi
+
+  if [[ -z "$VISUAL_CROSSING_KEY" ]]; then
+    # demo mode: use open-meteo (no key needed)
+    _fetch_openmeteo "$city"
+    return
+  fi
+
+  local encoded_city
+  encoded_city=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$city" 2>/dev/null || \
+    echo "$city" | sed 's/ /%20/g')
+  local url="${VISUAL_CROSSING_BASE}/${encoded_city}?unitGroup=metric&key=${VISUAL_CROSSING_KEY}&contentType=json&elements=datetime,tempmax,tempmin,temp,feelslike,humidity,precip,precipprob,windspeed,windgust,winddir,cloudcover,visibility,uvindex,pressure,conditions,description,icon,moonphase,sunrise,sunset"
+
+  local data
+  data=$(_http_get "$url") || _die "Visual Crossing API request failed"
+  _cache_set "$cache_key" "$data"
+  echo "$data"
+}
+
+_fetch_openmeteo() {
+  # Geocode city first
+  local city="$1"
+  local encoded_city
+  encoded_city=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$city" 2>/dev/null || \
+    echo "$city" | sed 's/ /%20/g')
+
+  local geo_url="https://geocoding-api.open-meteo.com/v1/search?name=${encoded_city}&count=1&language=en&format=json"
+  local geo
+  geo=$(_http_get "$geo_url") || _die "geocoding failed"
+
+  local lat lon country city_name
+  lat=$(echo "$geo" | jq -r '.results[0].latitude // empty')
+  lon=$(echo "$geo" | jq -r '.results[0].longitude // empty')
+  country=$(echo "$geo" | jq -r '.results[0].country // ""')
+  city_name=$(echo "$geo" | jq -r '.results[0].name // empty')
+  [[ -z "$lat" ]] && _die "city not found: $city"
+
+  local wx_url="https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,surface_pressure,uv_index&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,uv_index_max,sunrise,sunset&timezone=auto&forecast_days=5"
+  local wx
+  wx=$(_http_get "$wx_url") || _die "open-meteo request failed"
+
+  # Normalize into a common shape (subset of Visual Crossing schema)
+  local now
+  now=$(echo "$wx" | jq -r '.current')
+  local daily
+  daily=$(echo "$wx" | jq '.daily')
+
+  # Build normalized JSON
+  jq -n \
+    --arg city "$city_name" \
+    --arg country "$country" \
+    --argjson now "$now" \
+    --argjson daily "$daily" \
+    '{
+      resolvedAddress: ($city + ", " + $country),
+      days: ($daily.time | to_entries | map({
+        datetime:      .value,
+        tempmax:       $daily.temperature_2m_max[.key],
+        tempmin:       $daily.temperature_2m_min[.key],
+        temp:          (($daily.temperature_2m_max[.key] + $daily.temperature_2m_min[.key]) / 2),
+        precipprob:    $daily.precipitation_probability_max[.key],
+        precip:        $daily.precipitation_sum[.key],
+        windspeed:     $daily.wind_speed_10m_max[.key],
+        windgust:      $daily.wind_gusts_10m_max[.key],
+        uvindex:       $daily.uv_index_max[.key],
+        sunrise:       "sunrise",
+        sunset:        "sunset",
+        conditions:    "",
+        icon:          "cloudy",
+        moonphase:     0.5,
+        cloudcover:    0,
+        humidity:      0,
+        visibility:    10,
+        pressure:      $now.pressure_msl,
+        winddir:       $now.wind_direction_10m,
+        feelslike:     $now.apparent_temperature,
+        description:   ""
+      })),
+      currentConditions: {
+        temp:          $now.temperature_2m,
+        feelslike:     $now.apparent_temperature,
+        humidity:      $now.relative_humidity_2m,
+        precip:        $now.precipitation,
+        precipprob:    0,
+        windspeed:     $now.wind_speed_10m,
+        windgust:      $now.wind_gusts_10m,
+        winddir:       $now.wind_direction_10m,
+        cloudcover:    $now.cloud_cover,
+        pressure:      $now.pressure_msl,
+        uvindex:       ($now.uv_index // 0),
+        visibility:    10,
+        conditions:    "",
+        icon:          "cloudy",
+        sunrise:       "06:00:00",
+        sunset:        "20:00:00",
+        moonphase:     0.5
+      }
+    }'
+}
+
+_fetch_astro() {
+  local city="$1"
+  [[ -z "$WEATHERAPI_KEY" ]] && return 0
+  local cache_key="astro_${city}"
+  local cached
+  if cached=$(_cache_get "$cache_key" 2>/dev/null); then echo "$cached"; return 0; fi
+  local encoded_city
+  encoded_city=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$city" 2>/dev/null || \
+    echo "$city" | sed 's/ /%20/g')
+  local url="${WEATHERAPI_BASE}/astronomy.json?key=${WEATHERAPI_KEY}&q=${encoded_city}"
+  local data
+  data=$(_http_get "$url") || return 0
+  _cache_set "$cache_key" "$data"
+  echo "$data"
+}
+
+# ─── unit converters / helpers ────────────────────────────────
+_kmh_to_ms() {
+  python3 -c "print(f'{float(\"$1\")*1000/3600:.1f}')" 2>/dev/null || echo "$1"
+}
+
+_compass() {
+  local deg="$1"
+  local dirs=(N NNE NE ENE E ESE SE SSE S SSW SW WSW W WNW NW NNW)
+  local idx
+  idx=$(python3 -c "print(int((float('$deg') * 16 / 360 + 1) % 16))" 2>/dev/null || echo 0)
+  echo "${dirs[$idx]}"
+}
+
+_moon_icon() {
+  # moonphase is 0..1 float
+  local phase="$1"
+  local p
+  p=$(python3 -c "p=float('$phase'); print(int(p*8))" 2>/dev/null || echo 4)
+  local icons=('🌑' '🌒' '🌓' '🌔' '🌕' '🌖' '🌗' '🌘' '🌑')
+  echo "${icons[$p]:-🌕}"
+}
+
+_moon_name() {
+  local phase="$1"
+  python3 -c "
+p=float('$phase')
+if p<0.02 or p>0.98: print('New Moon')
+elif p<0.24: print('Waxing Crescent')
+elif p<0.26: print('First Quarter')
+elif p<0.48: print('Waxing Gibbous')
+elif p<0.52: print('Full Moon')
+elif p<0.74: print('Waning Gibbous')
+elif p<0.76: print('Last Quarter')
+else: print('Waning Crescent')
+" 2>/dev/null || echo "—"
+}
+
+_weather_icon() {
+  local icon="$1" cond="$2"
+  case "$icon" in
+    clear-day)           echo "☀️"  ;;
+    clear-night)         echo "🌙"  ;;
+    partly-cloudy-day)   echo "⛅"  ;;
+    partly-cloudy-night) echo "🌤"  ;;
+    cloudy)              echo "☁️"  ;;
+    rain)                echo "🌧"  ;;
+    showers-day)         echo "🌦"  ;;
+    snow)                echo "❄️"  ;;
+    sleet)               echo "🌨"  ;;
+    wind)                echo "💨"  ;;
+    fog)                 echo "🌫"  ;;
+    thunder-rain)        echo "⛈"  ;;
+    thunder-showers-day) echo "🌩"  ;;
+    *)                   echo "🌡"  ;;
+  esac
+}
+
+_uv_level() {
+  local uv="$1"
+  python3 -c "
+u=float('$uv')
+if u<3:   print('Low')
+elif u<6: print('Moderate')
+elif u<8: print('High')
+elif u<11:print('Very High')
+else:     print('Extreme')
+" 2>/dev/null || echo "—"
+}
+
+_uv_color() {
+  local uv="$1"
+  python3 -c "
+u=float('$uv')
+if u<3:   print('\\033[38;5;120m')
+elif u<6: print('\\033[38;5;220m')
+elif u<8: print('\\033[38;5;214m')
+elif u<11:print('\\033[38;5;196m')
+else:     print('\\033[38;5;213m')
+" 2>/dev/null || echo ""
+}
+
+_aqi_badge() {
+  local aqi="$1"
+  python3 -c "
+a=int(float('$aqi'))
+if a<=50:   print('Good        ','\\033[38;5;120m')
+elif a<=100:print('Moderate    ','\\033[38;5;220m')
+elif a<=150:print('Unhealthy*  ','\\033[38;5;214m')
+elif a<=200:print('Unhealthy   ','\\033[38;5;196m')
+elif a<=300:print('Very Unhealthy','\\033[38;5;201m')
+else:       print('Hazardous   ','\\033[38;5;88m')
+" 2>/dev/null || echo "—"
+}
+
+_pressure_level() {
+  local p="$1"
+  python3 -c "
+p=float('$p')
+if p<980:   print('Very Low')
+elif p<1000:print('Low')
+elif p<1020:print('Normal')
+elif p<1040:print('High')
+else:       print('Very High')
+" 2>/dev/null || echo "—"
+}
+
+_wind_rose() {
+  local deg="$1"
+  python3 -c "
+d = float('$deg') % 360
+idx = int((d + 22.5) / 45) % 8
+arrow = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][idx]
+print('   N   ')
+print('NW   NE')
+print(f'W  {arrow}  E')
+print('SW   SE')
+print('   S   ')
+" 2>/dev/null
+}
+
+_fmt_date() {
+  local d="$1"
+  python3 -c "
+from datetime import datetime
+try:
+    dt = datetime.strptime('$d','%Y-%m-%d')
+    print(dt.strftime('%a %b %-d'))
+except: print('$d')
+" 2>/dev/null || echo "$d"
+}
+
+_today_label() {
+  python3 -c "from datetime import datetime; print(datetime.now().strftime('%A, %B %-d %Y'))" 2>/dev/null || date '+%A, %B %d %Y'
+}
+
+_round() {
+  python3 -c "print(round(float('$1')))" 2>/dev/null || echo "$1"
+}
+
+# ─── box drawing helpers ───────────────────────────────────────
+# bash ${#} counts codepoints, not columns: emoji like 🌧 (1 codepoint) render
+# as 2 columns, while ☁️ (base + U+FE0F variation selector) is also 2 columns
+# but counts as 2 codepoints — causing per-row misalignment. Use Python instead.
+_display_width() {
+  echo -n "$1" | python3 -c "
+import unicodedata, sys
+s = sys.stdin.read()
+w = 0
+for c in s:
+    o = ord(c)
+    if 0xFE00 <= o <= 0xFE0F or 0xE0100 <= o <= 0xE01EF:
+        continue
+    if unicodedata.category(c) in ('Mn', 'Cf', 'Cc'):
+        continue
+    eaw = unicodedata.east_asian_width(c)
+    if eaw in ('W', 'F'):
+        w += 2
+    elif eaw == 'A' and 0x2600 <= o <= 0x27BF:
+        w += 2
+    else:
+        w += 1
+print(w)
+" 2>/dev/null || echo "${#1}"
+}
+
+_box_top()    { local w="$1"; printf "┌"; printf '─%.0s' $(seq 1 $((w-2))); printf "┐\n"; }
+_box_bot()    { local w="$1"; printf "└"; printf '─%.0s' $(seq 1 $((w-2))); printf "┘\n"; }
+_box_sep()    { local w="$1"; printf "├"; printf '─%.0s' $(seq 1 $((w-2))); printf "┤\n"; }
+_box_mid()    { local w="$1" content="$2"
+  local vis vlen pad
+  vis=$(echo -e "$content" | sed 's/\x1b\[[0-9;]*m//g')
+  vlen=$(_display_width "$vis")
+  pad=$(( w - 3 - vlen ))
+  (( pad < 0 )) && pad=0
+  printf "│ "; echo -ne "$content"; printf "%*s│\n" "$pad" ""; }
+_box_empty()  { local w="$1"; printf "│%*s│\n" $((w-2)) ""; }
+
+_hbar() {
+  # _hbar VALUE MAX WIDTH COLOR
+  local val="$1" max="$2" width="$3" color="${4:-$GREEN}"
+  local filled
+  filled=$(python3 -c "v=float('$val');m=float('$max');w=int('$width'); print(min(int(v/m*w),w))" 2>/dev/null || echo 0)
+  local empty=$(( width - filled ))
+  printf "${color}"
+  printf '█%.0s' $(seq 1 $filled) 2>/dev/null
+  printf "${FG_DGRAY}"
+  printf '░%.0s' $(seq 1 $empty) 2>/dev/null
+  printf "${RESET}"
+}
+
+# ─── banner ───────────────────────────────────────────────────
+_banner() {
+  echo -e ""
+  echo -e "${FG_SKY}${BOLD}  ╔═══════════════════════════════╗${RESET}"
+  echo -e "${FG_SKY}${BOLD}  ║ ${FG_CREAM}⛈  forecast-storm${FG_SKY}  v${VERSION}   ║${RESET}"
+  echo -e "${FG_SKY}${BOLD}  ╚═══════════════════════════════╝${RESET}"
+  echo ""
+}
+
+# ─── section: TODAY ───────────────────────────────────────────
+_render_today() {
+  local data="$1"
+  local city
+  city=$(echo "$data" | jq -r '.resolvedAddress // "Unknown"')
+  local today
+  today=$(echo "$data" | jq -r '.currentConditions // .days[0]')
+  local temp feelslike tmax tmin hum icon cond desc
+  temp=$(echo "$today"     | jq -r '.temp // 0')
+  feelslike=$(echo "$today"| jq -r '.feelslike // 0')
+  hum=$(echo "$today"      | jq -r '.humidity // 0')
+  icon=$(echo "$today"     | jq -r '.icon // "cloudy"')
+  cond=$(echo "$today"     | jq -r '.conditions // ""')
+  tmax=$(echo "$data"      | jq -r '.days[0].tempmax // 0')
+  tmin=$(echo "$data"      | jq -r '.days[0].tempmin // 0')
+  desc=$(echo "$data"      | jq -r '.days[0].description // ""')
+
+  local wi
+  wi=$(_weather_icon "$icon" "$cond")
+  local temp_r feelslike_r tmax_r tmin_r hum_r
+  temp_r=$(_round "$temp")
+  feelslike_r=$(_round "$feelslike")
+  tmax_r=$(_round "$tmax")
+  tmin_r=$(_round "$tmin")
+  hum_r=$(_round "$hum")
+
+  local W=52
+  _box_top $W
+  _box_mid $W "${BOLD}${FG_CREAM} $wi  $city${RESET}"
+  _box_mid $W "${FG_DGRAY} $(_today_label)${RESET}"
+  _box_sep $W
+  _box_mid $W "${FG_SKY}${BOLD}  $(printf '%3d' "$temp_r")°C${RESET}  ${FG_GRAY}feels like ${feelslike_r}°C${RESET}"
+  _box_mid $W "${FG_LGRAY}  ↑ ${tmax_r}°C  ↓ ${tmin_r}°C   💧 ${hum_r}%${RESET}"
+  if [[ -n "$cond" ]]; then
+    _box_mid $W "${FG_GRAY}  ${cond}${RESET}"
+  fi
+  if [[ -n "$desc" ]]; then
+    # word-wrap desc to width-6 chars
+    local maxw=$(( W - 6 ))
+    while IFS= read -r line; do
+      _box_mid $W "${FG_DGRAY}  ${line}${RESET}"
+    done < <(echo "$desc" | fold -s -w "$maxw")
+  fi
+  _box_bot $W
+  echo ""
+}
+
+# ─── section: FORECAST ────────────────────────────────────────
+_render_forecast() {
+  local data="$1"
+  local W=52
+  echo -e "${BOLD}${FG_LGRAY}  4-Day Forecast${RESET}"
+  echo ""
+  _box_top $W
+  _box_mid $W "${FG_DGRAY}  Day            High    Low    Precip${RESET}"
+  _box_sep $W
+  local i
+  for i in 1 2 3 4; do
+    local day
+    day=$(echo "$data" | jq -r ".days[$i] // empty")
+    [[ -z "$day" ]] && continue
+    local dt tmax tmin pp icon wi
+    dt=$(echo "$day" | jq -r '.datetime')
+    tmax=$(echo "$day" | jq -r '.tempmax // 0')
+    tmin=$(echo "$day" | jq -r '.tempmin // 0')
+    pp=$(echo "$day"   | jq -r '.precipprob // 0')
+    icon=$(echo "$day" | jq -r '.icon // "cloudy"')
+    wi=$(_weather_icon "$icon" "")
+    dt=$(_fmt_date "$dt")
+    local tmax_r tmin_r pp_r
+    tmax_r=$(_round "$tmax")
+    tmin_r=$(_round "$tmin")
+    pp_r=$(_round "$pp")
+    local bar
+    bar=$(_hbar "$pp_r" "100" "8" "$FG_SKY")
+    _box_mid $W "  ${wi} ${FG_CREAM}$(printf '%-10s' "$dt")${RESET} ${FG_ORANGE}$(printf '%3d' "$tmax_r")°${RESET} ${FG_LBLUE}$(printf '%3d' "$tmin_r")°${RESET}  ${bar}${FG_DGRAY}${pp_r}%${RESET}"
+  done
+  _box_bot $W
+  echo ""
+}
+
+# ─── section: WIND ────────────────────────────────────────────
+_render_wind() {
+  local data="$1"
+  local today
+  today=$(echo "$data" | jq -r '.currentConditions // .days[0]')
+  local spd gust dir
+  spd=$(echo "$today"  | jq -r '.windspeed // 0')
+  gust=$(echo "$today" | jq -r '.windgust // 0')
+  dir=$(echo "$today"  | jq -r '.winddir // 0')
+
+  local spd_ms gust_ms compass
+  spd_ms=$(_kmh_to_ms "$spd")
+  gust_ms=$(_kmh_to_ms "$gust")
+  compass=$(_compass "$dir")
+
+  local rose
+  rose=$(_wind_rose "$dir")
+
+  local W=52
+  echo -e "${BOLD}${FG_LGRAY}  Wind${RESET}"
+  echo ""
+  _box_top $W
+
+  local spd_r gust_r
+  spd_r=$(_round "$spd")
+  gust_r=$(_round "$gust")
+
+  # Draw wind rose side-by-side with stats
+  local rose_lines=()
+  while IFS= read -r line; do
+    rose_lines+=("$line")
+  done <<< "$rose"
+
+  local stats=(
+    "${FG_CREAM}${BOLD} Speed${RESET}   ${FG_TEAL}${spd_ms} m/s${RESET} ${FG_DGRAY}(${spd_r} km/h)${RESET}"
+    "${FG_CREAM}${BOLD} Gusts${RESET}   ${FG_ORANGE}${gust_ms} m/s${RESET} ${FG_DGRAY}(${gust_r} km/h)${RESET}"
+    "${FG_CREAM}${BOLD} Dir${RESET}     ${FG_GOLD}${compass}${RESET} ${FG_DGRAY}(${dir}°)${RESET}"
+    ""
+    "${FG_DGRAY} Rose (N=up)${RESET}"
+  )
+
+  # pad rose_lines to 5
+  while (( ${#rose_lines[@]} < 5 )); do rose_lines+=("     "); done
+
+  _box_mid $W "${stats[0]}"
+  _box_mid $W "${stats[1]}"
+  _box_mid $W "${stats[2]}"
+  _box_sep $W
+  _box_mid $W "${FG_DGRAY} Compass${RESET}"
+  for l in "${rose_lines[@]}"; do
+    _box_mid $W "   ${FG_TEAL}${l}${RESET}"
+  done
+  _box_bot $W
+  echo ""
+}
+
+# ─── section: CONDITIONS ──────────────────────────────────────
+_render_conditions() {
+  local data="$1"
+  local today
+  today=$(echo "$data" | jq -r '.currentConditions // .days[0]')
+  local day0
+  day0=$(echo "$data" | jq -r '.days[0]')
+
+  local pp precip cloud hum vis
+  pp=$(echo "$today"     | jq -r '.precipprob // (env.day0 | fromjson.precipprob) // 0' 2>/dev/null || \
+       echo "$day0"      | jq -r '.precipprob // 0')
+  precip=$(echo "$today" | jq -r '.precip // 0')
+  cloud=$(echo "$today"  | jq -r '.cloudcover // 0')
+  hum=$(echo "$today"    | jq -r '.humidity // 0')
+  vis=$(echo "$today"    | jq -r '.visibility // 0')
+
+  local pp_r precip_r cloud_r hum_r vis_r
+  pp_r=$(_round "$pp")
+  precip_r=$(python3 -c "print(f'{float(\"$precip\"):.1f}')" 2>/dev/null || echo "$precip")
+  cloud_r=$(_round "$cloud")
+  hum_r=$(_round "$hum")
+  vis_r=$(_round "$vis")
+
+  local W=52
+  echo -e "${BOLD}${FG_LGRAY}  Conditions${RESET}"
+  echo ""
+  _box_top $W
+  local max_vis=20
+  _box_mid $W " 🌂 Precip prob   ${FG_SKY}${pp_r}%${RESET}   $(_hbar "$pp_r" "100" "12" "$FG_SKY")"
+  _box_mid $W " 💧 Precip        ${FG_LBLUE}${precip_r} mm${RESET}"
+  _box_mid $W " ☁️  Cloud cover   ${FG_GRAY}${cloud_r}%${RESET}    $(_hbar "$cloud_r" "100" "12" "$FG_GRAY")"
+  _box_mid $W " 💦 Humidity      ${FG_CYAN}${hum_r}%${RESET}    $(_hbar "$hum_r" "100" "12" "$FG_CYAN")"
+  _box_mid $W " 👁  Visibility   ${FG_LGRAY}${vis_r} km${RESET}   $(_hbar "$vis_r" "$max_vis" "12" "$FG_LGRAY")"
+  _box_bot $W
+  echo ""
+}
+
+# ─── section: AIR ─────────────────────────────────────────────
+_render_air() {
+  local data="$1"
+  local today
+  today=$(echo "$data" | jq -r '.currentConditions // .days[0]')
+
+  local uv press
+  uv=$(echo "$today"    | jq -r '.uvindex // 0')
+  press=$(echo "$today" | jq -r '.pressure // 1013')
+
+  local uv_r press_r
+  uv_r=$(_round "$uv")
+  press_r=$(_round "$press")
+
+  local uv_lv press_lv uv_color
+  uv_lv=$(_uv_level "$uv_r")
+  press_lv=$(_pressure_level "$press_r")
+  uv_color=$(_uv_color "$uv_r")
+
+  local W=52
+  echo -e "${BOLD}${FG_LGRAY}  Air Quality & Atmosphere${RESET}"
+  echo ""
+  _box_top $W
+  _box_mid $W " ☀️  UV Index      ${uv_color}${BOLD}${uv_r}${RESET}  ${FG_DGRAY}(${uv_lv})${RESET}  $(_hbar "$uv_r" "12" "12" "$uv_color")"
+  _box_mid $W " 🌡  Pressure     ${FG_PINK}${press_r} hPa${RESET}  ${FG_DGRAY}(${press_lv})${RESET}"
+  _box_bot $W
+  echo ""
+}
+
+# ─── section: SUN ─────────────────────────────────────────────
+_render_sun() {
+  local data="$1"
+  local today
+  today=$(echo "$data" | jq -r '.currentConditions // .days[0]')
+
+  local rise set
+  rise=$(echo "$today" | jq -r '.sunrise // "06:00:00"')
+  set=$(echo "$today"  | jq -r '.sunset // "20:00:00"')
+  rise=$(echo "$rise" | cut -c1-5)
+  set=$(echo "$set"   | cut -c1-5)
+
+  local W=52
+  echo -e "${BOLD}${FG_LGRAY}  Sun${RESET}"
+  echo ""
+  _box_top $W
+  _box_mid $W "  🌅 Sunrise   ${FG_GOLD}${rise}${RESET}"
+  _box_mid $W "  🌇 Sunset    ${FG_ORANGE}${set}${RESET}"
+  _box_bot $W
+  echo ""
+}
+
+# ─── section: MOON ────────────────────────────────────────────
+_render_moon() {
+  local data="$1" astro="${2:-}"
+  local today
+  today=$(echo "$data" | jq -r '.currentConditions // .days[0]')
+  local moonphase
+  moonphase=$(echo "$data" | jq -r '.days[0].moonphase // .currentConditions.moonphase // 0.5')
+
+  local mi mn moonrise moonset illum
+  mi=$(_moon_icon "$moonphase")
+  mn=$(_moon_name "$moonphase")
+
+  if [[ -n "$astro" ]]; then
+    moonrise=$(echo "$astro" | jq -r '.astronomy.astro.moonrise // "—"' 2>/dev/null || echo "—")
+    moonset=$(echo "$astro"  | jq -r '.astronomy.astro.moonset // "—"' 2>/dev/null || echo "—")
+    illum=$(echo "$astro"    | jq -r '.astronomy.astro.moon_illumination // "—"' 2>/dev/null || echo "—")
+  else
+    moonrise="—"
+    moonset="—"
+    illum=$(python3 -c "
+import math
+p=float('$moonphase')
+phase_angle = abs(p - 0.5) * 2
+illum = (1 - math.cos(math.pi * (1-phase_angle))) / 2 * 100
+print(f'{illum:.0f}')
+" 2>/dev/null || echo "—")
+  fi
+
+  local W=52
+  echo -e "${BOLD}${FG_LGRAY}  Moon${RESET}"
+  echo ""
+  _box_top $W
+  _box_mid $W "  ${mi}  ${FG_CREAM}${mn}${RESET}"
+  _box_mid $W "  ${FG_DGRAY}Illumination${RESET}  ${FG_GOLD}${illum}%${RESET}"
+  [[ "$moonrise" != "—" ]] && _box_mid $W "  🌕 Moonrise    ${FG_LGRAY}${moonrise}${RESET}"
+  [[ "$moonset"  != "—" ]] && _box_mid $W "  🌑 Moonset     ${FG_DGRAY}${moonset}${RESET}"
+  _box_bot $W
+  echo ""
+}
+
+# ─── plain-text output (for curl/wget pipe) ───────────────────
+_render_plain() {
+  local data="$1" city="$2"
+  local resolved
+  resolved=$(echo "$data" | jq -r '.resolvedAddress // "'"$city"'"')
+  local today
+  today=$(echo "$data" | jq -r '.currentConditions // .days[0]')
+
+  local temp tmax tmin feel hum pp wind gust dir cond icon
+  temp=$(_round "$(echo "$today" | jq -r '.temp // 0')")
+  tmax=$(_round "$(echo "$data"  | jq -r '.days[0].tempmax // 0')")
+  tmin=$(_round "$(echo "$data"  | jq -r '.days[0].tempmin // 0')")
+  feel=$(_round "$(echo "$today" | jq -r '.feelslike // 0')")
+  hum=$(_round  "$(echo "$today" | jq -r '.humidity // 0')")
+  pp=$(_round   "$(echo "$today" | jq -r '.precipprob // ('"$(echo "$data" | jq '.days[0].precipprob // 0')"')')")
+  wind=$(echo "$today"  | jq -r '.windspeed // 0')
+  gust=$(echo "$today"  | jq -r '.windgust // 0')
+  dir=$(_compass "$(echo "$today" | jq -r '.winddir // 0')")
+  cond=$(echo "$today"  | jq -r '.conditions // ""')
+  icon=$(echo "$today"  | jq -r '.icon // "cloudy"')
+  local wi
+  wi=$(_weather_icon "$icon" "$cond")
+
+  cat <<EOF
+
+ forecast-storm / $resolved
+ $(_today_label)
+ ─────────────────────────────────────
+ ${wi}  ${temp}°C  (feels ${feel}°C)   ↑${tmax}° ↓${tmin}°
+ ${cond}
+ ─────────────────────────────────────
+ Humidity      ${hum}%
+ Precip prob   ${pp}%
+ Wind          $(_kmh_to_ms "$wind") m/s ${dir}
+ Gusts         $(_kmh_to_ms "$gust") m/s
+ ─────────────────────────────────────
+ 4-day:
+EOF
+
+  for i in 1 2 3 4; do
+    local day
+    day=$(echo "$data" | jq -r ".days[$i] // empty")
+    [[ -z "$day" ]] && continue
+    local dt dx tn tx p ic
+    dt=$(_fmt_date "$(echo "$day" | jq -r '.datetime')")
+    tn=$(_round "$(echo "$day" | jq -r '.tempmin // 0')")
+    tx=$(_round "$(echo "$day" | jq -r '.tempmax // 0')")
+    p=$(_round  "$(echo "$day" | jq -r '.precipprob // 0')")
+    ic=$(echo "$day" | jq -r '.icon // "cloudy"')
+    dx=$(_weather_icon "$ic" "")
+    printf "   %-10s  %s  ↑%3d° ↓%3d°  💧%3d%%\n" "$dt" "$dx" "$tx" "$tn" "$p"
+  done
+  echo ""
+}
+
+# ─── full TUI render ──────────────────────────────────────────
+_render_tui() {
+  local data="$1" astro="$2"
+  clear
+  _banner
+  _render_today "$data"
+  _render_forecast "$data"
+
+  # Two columns: left=wind, right=sun+moon stacked
+  _render_wind "$data"
+  _render_sun "$data"
+  _render_moon "$data" "$astro"
+  _render_conditions "$data"
+  _render_air "$data"
+
+  echo -e "${FG_DGRAY}  Data: Visual Crossing / Open-Meteo / WeatherAPI  •  Forecast CLI v${VERSION}${RESET}"
+  echo ""
+}
+
+# ─── interactive mode (live refresh with keypress) ────────────
+_interactive() {
+  local city="$1"
+  local last_city="$city"
+  while true; do
+    _spinner_start "fetching $last_city"
+    local data astro
+    data=$(_fetch_weather "$last_city") || { _spinner_stop; _die "fetch failed"; }
+    astro=$(_fetch_astro "$last_city" 2>/dev/null || echo "")
+    _spinner_stop
+    _render_tui "$data" "$astro"
+    echo -e "${FG_DGRAY}  [r] refresh  [c] change city  [q] quit  [h] help${RESET}"
+    echo -n "  > "
+    local key
+    IFS= read -r -n1 key
+    echo ""
+    case "$key" in
+      r|R) _cache_del "$last_city" ;;
+      c|C)
+        echo -n "  city: "
+        IFS= read -r last_city
+        ;;
+      q|Q|$'\004') echo ""; exit 0 ;;
+      h|H) _show_help; sleep 3 ;;
+    esac
+  done
+}
+
+_cache_del() {
+  local city="$1"
+  rm -f "$CACHE_DIR/$(_cache_key "vc_${city}").json" \
+         "$CACHE_DIR/$(_cache_key "astro_${city}").json" 2>/dev/null || true
+}
+
+# ─── setup wizard ─────────────────────────────────────────────
+_setup() {
+  echo -e ""
+  echo -e "${FG_SKY}${BOLD}  forecast-storm setup${RESET}"
+  echo -e "${FG_DGRAY}  Configure API keys for full features.${RESET}"
+  echo -e "${FG_DGRAY}  Press ENTER to skip any key.${RESET}"
+  echo ""
+
+  local vc wa
+  echo -n "  Visual Crossing API key: "
+  read -r vc
+  echo -n "  WeatherAPI key (moon data): "
+  read -r wa
+
+  mkdir -p "$(dirname "$CONFIG_FILE")"
+  cat > "$CONFIG_FILE" <<EOF
+# forecast-storm configuration
+# Generated: $(date)
+VISUAL_CROSSING_KEY="${vc:-}"
+WEATHERAPI_KEY="${wa:-}"
+EOF
+  chmod 600 "$CONFIG_FILE"
+  echo ""
+  echo -e "${GREEN}  ✓ Config saved to ${CONFIG_FILE}${RESET}"
+  echo ""
+}
+
+# ─── install self ─────────────────────────────────────────────
+_install() {
+  local dest="${1:-/usr/local/bin/forecast-storm}"
+  local self
+  self="$(realpath "${BASH_SOURCE[0]}")"
+  if [[ "$self" != "$dest" ]]; then
+    cp "$self" "$dest"
+    chmod +x "$dest"
+    echo -e "${GREEN}  ✓ Installed to $dest${RESET}"
+    echo -e "${FG_DGRAY}  Run: forecast-storm [city]${RESET}"
+  else
+    echo -e "${FG_GRAY}  Already installed at $dest${RESET}"
+  fi
+}
+
+# ─── help ─────────────────────────────────────────────────────
+_show_help() {
+  cat <<'EOF'
+
+  forecast-storm — terminal weather TUI
+
+  USAGE
+    forecast-storm [OPTIONS] [CITY]
+    curl -fsSL https://forecast-storm-pwa.vercel.app/api/cli | bash -s -- [CITY]
+
+  OPTIONS
+    -h, --help          Show this help
+    -v, --version       Print version
+    -p, --plain         Plain text output (no TUI, no colors) — great for pipes
+    -j, --json          Raw JSON output from the weather API
+    -r, --refresh       Force refresh (bypass cache)
+        --setup         Configure API keys
+        --install [PATH] Install to PATH (default: /usr/local/bin)
+        --clear-cache   Clear all cached data
+
+  EXAMPLES
+    forecast-storm                     # Auto-detect city from IP
+    forecast-storm "New York"          # Specific city
+    forecast-storm -p London           # Plain text, pipe-friendly
+    forecast-storm -j Tokyo | jq .     # Raw JSON
+    forecast-storm --refresh Berlin    # Skip cache
+
+  CURL ONE-LINER
+    curl -fsSL https://forecast-storm-pwa.vercel.app/api/cli | bash -s -- London
+
+  ENVIRONMENT
+    VISUAL_CROSSING_KEY   Visual Crossing API key
+    WEATHERAPI_KEY        WeatherAPI.com key (moon data)
+
+  CONFIG
+    ~/.config/forecast-storm/config    (set by --setup)
+
+  WITHOUT API KEYS
+    Falls back to Open-Meteo (free, no key needed).
+    Set keys for full data: moon phases, AQI, detailed astronomy.
+
+EOF
+}
+
+# ─── one-shot plain output (for curl pipe UX) ─────────────────
+_run_once_plain() {
+  local city="$1" force_refresh="$2"
+  [[ "$force_refresh" == "1" ]] && _cache_del "$city"
+  _spinner_start "fetching $city"
+  local data
+  data=$(_fetch_weather "$city") || { _spinner_stop; _die "fetch failed"; }
+  _spinner_stop
+  _render_plain "$data" "$city"
+}
+
+_run_once_tui() {
+  local city="$1" force_refresh="$2"
+  [[ "$force_refresh" == "1" ]] && _cache_del "$city"
+  _spinner_start "fetching $city"
+  local data astro
+  data=$(_fetch_weather "$city") || { _spinner_stop; _die "fetch failed"; }
+  astro=$(_fetch_astro "$city" 2>/dev/null || echo "")
+  _spinner_stop
+  _render_tui "$data" "$astro"
+}
+
+# ─── main entry point ─────────────────────────────────────────
+main() {
+  _dep_check
+
+  local city="" mode="tui" force_refresh="0" json_mode="0"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)          _show_help; exit 0 ;;
+      -v|--version)       echo "forecast-storm $VERSION"; exit 0 ;;
+      -p|--plain)         mode="plain" ;;
+      -j|--json)          json_mode="1" ;;
+      -r|--refresh)       force_refresh="1" ;;
+      -i|--interactive)   mode="interactive" ;;
+      --setup)            _setup; exit 0 ;;
+      --install)          _install "${2:-}"; exit 0 ;;
+      --clear-cache)      rm -rf "$CACHE_DIR"; echo "Cache cleared."; exit 0 ;;
+      --)                 shift; city="$*"; break ;;
+      -*)                 _die "unknown option: $1  (try --help)" ;;
+      *)                  city="${city:+$city }$1" ;;
+    esac
+    shift
+  done
+
+  # Auto-detect city if not provided
+  if [[ -z "$city" ]]; then
+    _spinner_start "detecting location"
+    city=$(_get_ip_city 2>/dev/null || echo "Berlin")
+    _spinner_stop
+    [[ -z "$city" ]] && city="Berlin"
+  fi
+
+  [[ "$force_refresh" == "1" ]] && _cache_del "$city"
+
+  if [[ "$json_mode" == "1" ]]; then
+    _spinner_start "fetching $city"
+    local data
+    data=$(_fetch_weather "$city")
+    _spinner_stop
+    echo "$data" | jq .
+    exit 0
+  fi
+
+  case "$mode" in
+    plain)       _run_once_plain "$city" "$force_refresh" ;;
+    interactive) _interactive "$city" ;;
+    tui)
+      # Detect if running inside a pipe or non-interactive terminal
+      if [ ! -t 1 ]; then
+        _run_once_plain "$city" "$force_refresh"
+      else
+        _run_once_tui "$city" "$force_refresh"
+      fi
+      ;;
+  esac
+}
+
+main "$@"
