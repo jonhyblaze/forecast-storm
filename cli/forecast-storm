@@ -314,7 +314,7 @@ _weather_icon() {
     clear-night)         echo "◗"  ;;
     partly-cloudy-day)   echo "◑"  ;;
     partly-cloudy-night) echo "◐"  ;;
-    cloudy)              echo "▓"  ;;
+    cloudy)              echo $''  ;;
     rain)                echo "≋"  ;;
     showers-day)         echo "≋"  ;;
     snow)                echo "⊛"  ;;
@@ -521,19 +521,24 @@ _render_today() {
 
   local wi
   wi=$(_weather_icon "$icon")
-  local temp_r feelslike_r tmax_r tmin_r hum_r
+  local temp_r feelslike_r tmax_r tmin_r hum_r pp_r
   temp_r=$(_round "$temp")
   feelslike_r=$(_round "$feelslike")
   tmax_r=$(_round "$tmax")
   tmin_r=$(_round "$tmin")
   hum_r=$(_round "$hum")
+  pp_r=$(_round "$(echo "$data" | jq -r '.days[0].precipprob // .currentConditions.precipprob // 0')")
+
+  local therm=$''   # nf-fa-thermometer-half
+  local drop=$''    # nf-fa-tint (droplet)
 
   local W=48
   _box_title $W "TODAY"
   _box_mid $W "${FG_CREAM}${BOLD} ${wi}  ${city}${RESET}"
   _box_mid $W "${FG_DGRAY} $(_today_label)${RESET}"
   _box_sep $W
-  _box_mid $W " ${FG_SKY}${BOLD}$(printf '%3d' "$temp_r")°C${RESET}  ${FG_GRAY}feels $(printf '%2d' "$feelslike_r")°${RESET}  ${FG_ORANGE}↑$(printf '%2d' "$tmax_r")°${RESET}  ${FG_LBLUE}↓$(printf '%2d' "$tmin_r")°${RESET}  ${FG_TEAL}~${hum_r}%${RESET}"
+  _box_mid $W " ${FG_TEAL}${therm}${RESET} ${FG_SKY}${BOLD}$(printf '%3d' "$temp_r")°C${RESET}  ${FG_GRAY}feels $(printf '%2d' "$feelslike_r")°${RESET}"
+  _box_mid $W " ${FG_SKY}${drop}${RESET} ${FG_SKY}${pp_r}%${RESET}  ${FG_ORANGE}↑$(printf '%2d' "$tmax_r")°${RESET}  ${FG_LBLUE}↓$(printf '%2d' "$tmin_r")°${RESET}  ${FG_TEAL}~${hum_r}%${RESET}"
   [[ -n "$cond" ]] && _box_mid $W "${FG_LGRAY} ${cond}${RESET}"
   if [[ -n "$desc" ]]; then
     local maxw=$(( W - 6 ))
@@ -689,6 +694,14 @@ _render_sun() {
   local icon_sunset="\ue34d"
 
   _box_title $W "SUN"
+  _box_empty $W
+  _box_mid $W "          · · ·"
+  _box_mid $W "         ╲  │  ╱"
+  _box_mid $W "       ─ ─  ${FG_GOLD}◎${RESET}  ─ ─"
+  _box_mid $W "         ╱  │  ╲"
+  _box_mid $W "          · · ·"
+  _box_empty $W
+  _box_sep $W
   _box_mid $W " ${FG_GOLD}${icon_sunrise}${RESET}  ${FG_DGRAY}Sunrise${RESET}   ${FG_GOLD}${rise}${RESET}"
   _box_mid $W " ${FG_ORANGE}${icon_sunset}${RESET}  ${FG_DGRAY}Sunset${RESET}    ${FG_ORANGE}${set}${RESET}"
   _box_bot $W
