@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ╔══════════════════════════════════════════════════════════════╗
 # ║            forecast-storm — terminal weather TUI             ║
-# ║  curl -fsSL https://forecast.storm/install | bash           ║
-# ║  wget -qO- https://forecast.storm/install | bash            ║
+# ║  curl -fsSL https://forecast-storm.vercel.app/install | bash║
+# ║  wget -qO- https://forecast-storm.vercel.app/install | bash ║
 # ╚══════════════════════════════════════════════════════════════╝
 # SPDX-License-Identifier: MIT
 # https://github.com/jonhyblaze/forecast-storm

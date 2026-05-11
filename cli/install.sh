@@ -5,8 +5,7 @@
 #   wget  -qO-  https://forecast-storm.vercel.app/install.sh | bash
 set -euo pipefail
 
-REPO="https://raw.githubusercontent.com/jonhyblaze/forecast-storm/main"
-BINARY_URL="${REPO}/cli/forecast-storm"
+BINARY_URL="https://forecast-storm.vercel.app/cli"
 INSTALL_DIR="/usr/local/bin"
 BINARY="forecast-storm"
 
