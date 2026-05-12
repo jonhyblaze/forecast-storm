@@ -1,4 +1,3 @@
-import Image from "next/image"
 import Card, { Field } from "@/components/Card/Card"
 import { Sunrise, Sunset } from "lucide-react"
 import { SunType } from "./types"
@@ -8,12 +7,10 @@ export default function Sun({ data, className }: { data: SunType, className?: st
   return (
     <Card type="sun" className={cn("grid", className)}>
       <div className="relative overflow-auto -mx-6">
-        <Image
+        <img
           src="/png/sun/sunset.png"
           alt="Sunset over sea illustration"
-          className="object-fill w-full lg:w-auto lg:object-cover"
-          width={350}
-          height={220}
+          className="object-cover w-full h-full"
         />
       </div>
       <footer className="flex items-center justify-between ">

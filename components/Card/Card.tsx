@@ -33,7 +33,7 @@ type FieldProps = {
 
 export const Field = ({ Icon, name, value, className }: FieldProps) => {
   return (
-    <div className={cn("flex gap-2 475px:gap-4", className)}>
+    <div className={cn("flex gap-2 md:gap-3 xl:gap-4", className)}>
       <Icon size={24} />
       <div>
         <p className="475px:text-lg font-bold leading-5 475px:pb-0.5">{value}</p>

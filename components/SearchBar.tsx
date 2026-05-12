@@ -36,7 +36,7 @@ export default function SearchBar({ hasError, className }: { hasError: boolean; 
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         className={cn(
-          "w-full md:w-auto rounded-full ring-0 outline-none border-none bg-foreground/5 px-5.5 py-2.5  placeholder:text-[16px]",
+          "w-full md:w-auto rounded-full ring-0 outline-none border-none backdrop-blur-lg bg-foreground/10 px-5.5 py-2.5 dark:bg-background/25 placeholder:text-base",
           hasError ? "ring-1 ring-amber-500" : "ring-0"
         )}
         placeholder="Search"

@@ -83,28 +83,24 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
 
   return (
     <main className="relative min-h-screen min-w-screen">
-      <Image
-        src={computedBg}
-        alt={normalizedWeather.today.icon}
-        fill
-        className="absolute object-cover blur-xs scale-[102%] "
-      />
+      <div className="absolute inset-0">
+        <Image src={computedBg} fill alt={normalizedWeather.today.icon} className="object-cover h-full w-full"/>
+      </div>
       <section className="mx-auto gap-8 py-10 px-5 sm:p-10 space-y-6 max-w-screen-2xl">
         <Topbar hasError={false} />
-        <Widgets className="flex flex-col md:grid grid-cols-1 gap-6 grid-rows-7 md:grid-cols-2 lg:grid-cols-6 lg:grid-rows-4 xl:grid-rows-2 xl:grid-cols-4">
+        <Widgets className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <Today
-            className="sm:col-span-2 lg:col-span-4 xl:col-start-1 xl:col-span-2 xl:row-start-1"
+            className="sm:col-span-2 lg:col-span-2 xl:col-span-2 "
             data={normalizedWeather.today}
           />
           <Forecast
             data={normalizedWeather.forecast}
-            className="col-span-1 md:col-span-1 lg:col-span-2 xl:col-span-1"
           />
-          <Sun data={normalizedWeather.sun} className="lg:col-span-2 xl:col-span-1" />
-          <Wind data={normalizedWeather.wind} className="lg:col-span-2 xl:col-span-1" />
-          <Conditions data={normalizedWeather.conditions} className="lg:col-span-2 xl:col-span-1" />
-          <Air data={normalizedWeather.air} className="lg:col-span-2 xl:col-span-1" />
-          <Moon data={normalizedWeather.moon} className="lg:col-span-2 xl:col-span-1" />
+          <Sun data={normalizedWeather.sun} />
+          <Wind data={normalizedWeather.wind} />
+          <Conditions data={normalizedWeather.conditions} />
+          <Air data={normalizedWeather.air} />
+          <Moon data={normalizedWeather.moon} />
         </Widgets>
       </section>
     </main>
