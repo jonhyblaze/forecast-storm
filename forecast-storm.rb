@@ -16,18 +16,9 @@ class ForecastStorm < Formula
 
   def caveats
     <<~EOS
-      forecast-storm works out of the box with Open-Meteo (no API key).
-
-      For full features (detailed moon data, AQI), configure API keys:
-        forecast-storm --setup
-
-      Or set environment variables:
-        export VISUAL_CROSSING_KEY="your_key"
-        export WEATHERAPI_KEY="your_key"
-
-      Keys can be obtained from:
-        Visual Crossing: https://www.visualcrossing.com/weather-api
-        WeatherAPI:      https://www.weatherapi.com/
+      forecast-storm is ready to use — no API key setup required.
+        forecast-storm          # auto-detect city
+        forecast-storm Tokyo    # specific city
     EOS
   end
 

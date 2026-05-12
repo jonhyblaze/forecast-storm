@@ -2,7 +2,7 @@
 
 A terminal weather TUI — the command-line companion to the **forecast-storm** Next.js dashboard. Renders all 7 widgets (Today, Forecast, Wind, Conditions, Air, Sun, Moon) directly in your terminal with full color, Unicode box-drawing, and a live refresh mode.
 
-Falls back to **Open-Meteo** (no API key) automatically — you get real weather data immediately, with richer data once you add your Visual Crossing / WeatherAPI keys.
+No setup required — install and run.
 
 ---
 
@@ -28,7 +28,7 @@ brew install forecast-storm
 ### Manual
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jonhyblaze/forecast-storm/main/cli/forecast-storm \
+curl -fsSL https://forecast-storm.vercel.app/cli \
      -o /usr/local/bin/forecast-storm && chmod +x /usr/local/bin/forecast-storm
 ```
 
@@ -59,7 +59,6 @@ forecast-storm [OPTIONS] [CITY]
 | `forecast-storm -p London` | Plain text (pipe-friendly) |
 | `forecast-storm -j Berlin \| jq .` | Raw JSON output |
 | `forecast-storm -r Paris` | Force refresh (bypass cache) |
-| `forecast-storm --setup` | Configure API keys |
 | `forecast-storm --clear-cache` | Wipe cached data |
 | `forecast-storm --install` | Install to /usr/local/bin |
 
@@ -71,36 +70,11 @@ forecast-storm [OPTIONS] [CITY]
 -p, --plain         Plain text — no TUI, no colors — great for pipes/scripts
 -j, --json          Raw JSON from the weather API
 -r, --refresh       Force cache bypass
-    --setup         Interactive API key wizard
     --install [PATH] Copy self to PATH (default: /usr/local/bin)
     --clear-cache   Clear all cached responses
 ```
 
 ---
-
-## API Keys
-
-forecast-storm works **without any API keys** — it falls back to [Open-Meteo](https://open-meteo.com/) (free, open, no account needed).
-
-To unlock full data (moon astronomy, AQI, detailed descriptions), add keys:
-
-```bash
-forecast-storm --setup
-```
-
-Or export them in your shell profile:
-
-```bash
-export VISUAL_CROSSING_KEY="your_key_here"   # https://www.visualcrossing.com/weather-api
-export WEATHERAPI_KEY="your_key_here"        # https://www.weatherapi.com
-```
-
-Or write them to `~/.config/forecast-storm/config`:
-
-```bash
-VISUAL_CROSSING_KEY="your_key_here"
-WEATHERAPI_KEY="your_key_here"
-```
 
 ---
 
@@ -133,12 +107,10 @@ You can run it entirely without installing:
 
 ```bash
 # One-shot plain output, any city
-curl -fsSL https://raw.githubusercontent.com/jonhyblaze/forecast-storm/main/cli/forecast-storm \
-     | bash -s -- -p "São Paulo"
+curl -fsSL https://forecast-storm.vercel.app/cli | bash -s -- -p "São Paulo"
 
 # TUI
-curl -fsSL https://raw.githubusercontent.com/jonhyblaze/forecast-storm/main/cli/forecast-storm \
-     | bash -s -- Tokyo
+curl -fsSL https://forecast-storm.vercel.app/cli | bash -s -- Tokyo
 ```
 
 ---
@@ -161,12 +133,11 @@ curl -fsSL https://raw.githubusercontent.com/jonhyblaze/forecast-storm/main/cli/
 
 Mirrors the Next.js dashboard exactly:
 
-| Source | Used for | Key env var |
-|---|---|---|
-| [Visual Crossing](https://www.visualcrossing.com/) | Everything weather | `VISUAL_CROSSING_KEY` |
-| [WeatherAPI](https://www.weatherapi.com/) | Moon astronomy | `WEATHERAPI_KEY` |
-| [Open-Meteo](https://open-meteo.com/) | Fallback (no key needed) | — |
-| [ipapi.co](https://ipapi.co/) | IP → city auto-detect | — |
+| Source | Used for |
+|---|---|
+| [Visual Crossing](https://www.visualcrossing.com/) | Everything weather |
+| [WeatherAPI](https://www.weatherapi.com/) | Moon astronomy |
+| [ipapi.co](https://ipapi.co/) | IP → city auto-detect |
 
 ---
 

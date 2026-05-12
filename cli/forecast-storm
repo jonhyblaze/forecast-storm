@@ -52,18 +52,9 @@ else
   FG_TEAL="" FG_CYAN="" FG_PINK="" FG_LBLUE="" FG_LGREEN="" FG_CREAM=""
 fi
 
-# ─── api keys (env or config file) ────────────────────────────
-CONFIG_FILE="${HOME}/.config/forecast-storm/config"
-_load_config() {
-  if [[ -f "$CONFIG_FILE" ]]; then
-    # shellcheck source=/dev/null
-    source "$CONFIG_FILE"
-  fi
-}
-_load_config
-
-VISUAL_CROSSING_KEY="${VISUAL_CROSSING_KEY:-}"
-WEATHERAPI_KEY="${WEATHERAPI_KEY:-}"
+# ─── api keys ─────────────────────────────────────────────────
+VISUAL_CROSSING_KEY="__VISUAL_CROSSING_KEY__"
+WEATHERAPI_KEY="__WEATHERAPI_KEY__"
 
 # ─── constants ─────────────────────────────────────────────────
 VISUAL_CROSSING_BASE="https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline"
@@ -155,12 +146,6 @@ _fetch_weather() {
     return 0
   fi
 
-  if [[ -z "$VISUAL_CROSSING_KEY" ]]; then
-    # demo mode: use open-meteo (no key needed)
-    _fetch_openmeteo "$city"
-    return
-  fi
-
   local encoded_city
   encoded_city=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$city" 2>/dev/null || \
     echo "$city" | sed 's/ /%20/g')
@@ -172,90 +157,8 @@ _fetch_weather() {
   echo "$data"
 }
 
-_fetch_openmeteo() {
-  # Geocode city first
-  local city="$1"
-  local encoded_city
-  encoded_city=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$city" 2>/dev/null || \
-    echo "$city" | sed 's/ /%20/g')
-
-  local geo_url="https://geocoding-api.open-meteo.com/v1/search?name=${encoded_city}&count=1&language=en&format=json"
-  local geo
-  geo=$(_http_get "$geo_url") || _die "geocoding failed"
-
-  local lat lon country city_name
-  lat=$(echo "$geo" | jq -r '.results[0].latitude // empty')
-  lon=$(echo "$geo" | jq -r '.results[0].longitude // empty')
-  country=$(echo "$geo" | jq -r '.results[0].country // ""')
-  city_name=$(echo "$geo" | jq -r '.results[0].name // empty')
-  [[ -z "$lat" ]] && _die "city not found: $city"
-
-  local wx_url="https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,surface_pressure,uv_index&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,uv_index_max,sunrise,sunset&timezone=auto&forecast_days=5"
-  local wx
-  wx=$(_http_get "$wx_url") || _die "open-meteo request failed"
-
-  # Normalize into a common shape (subset of Visual Crossing schema)
-  local now
-  now=$(echo "$wx" | jq -r '.current')
-  local daily
-  daily=$(echo "$wx" | jq '.daily')
-
-  # Build normalized JSON
-  jq -n \
-    --arg city "$city_name" \
-    --arg country "$country" \
-    --argjson now "$now" \
-    --argjson daily "$daily" \
-    '{
-      resolvedAddress: ($city + ", " + $country),
-      days: ($daily.time | to_entries | map({
-        datetime:      .value,
-        tempmax:       $daily.temperature_2m_max[.key],
-        tempmin:       $daily.temperature_2m_min[.key],
-        temp:          (($daily.temperature_2m_max[.key] + $daily.temperature_2m_min[.key]) / 2),
-        precipprob:    $daily.precipitation_probability_max[.key],
-        precip:        $daily.precipitation_sum[.key],
-        windspeed:     $daily.wind_speed_10m_max[.key],
-        windgust:      $daily.wind_gusts_10m_max[.key],
-        uvindex:       $daily.uv_index_max[.key],
-        sunrise:       "sunrise",
-        sunset:        "sunset",
-        conditions:    "",
-        icon:          "cloudy",
-        moonphase:     0.5,
-        cloudcover:    0,
-        humidity:      0,
-        visibility:    10,
-        pressure:      $now.pressure_msl,
-        winddir:       $now.wind_direction_10m,
-        feelslike:     $now.apparent_temperature,
-        description:   ""
-      })),
-      currentConditions: {
-        temp:          $now.temperature_2m,
-        feelslike:     $now.apparent_temperature,
-        humidity:      $now.relative_humidity_2m,
-        precip:        $now.precipitation,
-        precipprob:    0,
-        windspeed:     $now.wind_speed_10m,
-        windgust:      $now.wind_gusts_10m,
-        winddir:       $now.wind_direction_10m,
-        cloudcover:    $now.cloud_cover,
-        pressure:      $now.pressure_msl,
-        uvindex:       ($now.uv_index // 0),
-        visibility:    10,
-        conditions:    "",
-        icon:          "cloudy",
-        sunrise:       "06:00:00",
-        sunset:        "20:00:00",
-        moonphase:     0.5
-      }
-    }'
-}
-
 _fetch_astro() {
   local city="$1"
-  [[ -z "$WEATHERAPI_KEY" ]] && return 0
   local cache_key="astro_${city}"
   local cached
   if cached=$(_cache_get "$cache_key" 2>/dev/null); then echo "$cached"; return 0; fi
@@ -827,7 +730,7 @@ _render_tui() {
   # row 3: sun | moon
   _cols $W $W "$col_sun" "$col_moon"
 
-  echo -e "${FG_DGRAY}  Visual Crossing / Open-Meteo / WeatherAPI  ·  v${VERSION}${RESET}"
+  echo -e "${FG_DGRAY}  Visual Crossing / WeatherAPI  ·  v${VERSION}${RESET}"
   echo ""
 }
 
@@ -865,33 +768,6 @@ _cache_del() {
          "$CACHE_DIR/$(_cache_key "astro_${city}").json" 2>/dev/null || true
 }
 
-# ─── setup wizard ─────────────────────────────────────────────
-_setup() {
-  echo -e ""
-  echo -e "${FG_SKY}${BOLD}  forecast-storm setup${RESET}"
-  echo -e "${FG_DGRAY}  Configure API keys for full features.${RESET}"
-  echo -e "${FG_DGRAY}  Press ENTER to skip any key.${RESET}"
-  echo ""
-
-  local vc wa
-  echo -n "  Visual Crossing API key: "
-  read -r vc
-  echo -n "  WeatherAPI key (moon data): "
-  read -r wa
-
-  mkdir -p "$(dirname "$CONFIG_FILE")"
-  cat > "$CONFIG_FILE" <<EOF
-# forecast-storm configuration
-# Generated: $(date)
-VISUAL_CROSSING_KEY="${vc:-}"
-WEATHERAPI_KEY="${wa:-}"
-EOF
-  chmod 600 "$CONFIG_FILE"
-  echo ""
-  echo -e "${GREEN}  ✓ Config saved to ${CONFIG_FILE}${RESET}"
-  echo ""
-}
-
 # ─── install self ─────────────────────────────────────────────
 _install() {
   local dest="${1:-/usr/local/bin/forecast-storm}"
@@ -923,7 +799,6 @@ _show_help() {
     -p, --plain         Plain text output (no TUI, no colors) — great for pipes
     -j, --json          Raw JSON output from the weather API
     -r, --refresh       Force refresh (bypass cache)
-        --setup         Configure API keys
         --install [PATH] Install to PATH (default: /usr/local/bin)
         --clear-cache   Clear all cached data
 
@@ -936,17 +811,6 @@ _show_help() {
 
   CURL ONE-LINER
     curl -fsSL https://forecast-storm.vercel.app/api/cli | bash -s -- London
-
-  ENVIRONMENT
-    VISUAL_CROSSING_KEY   Visual Crossing API key
-    WEATHERAPI_KEY        WeatherAPI.com key (moon data)
-
-  CONFIG
-    ~/.config/forecast-storm/config    (set by --setup)
-
-  WITHOUT API KEYS
-    Falls back to Open-Meteo (free, no key needed).
-    Set keys for full data: moon phases, AQI, detailed astronomy.
 
 EOF
 }
@@ -987,7 +851,6 @@ main() {
       -j|--json)          json_mode="1" ;;
       -r|--refresh)       force_refresh="1" ;;
       -i|--interactive)   mode="interactive" ;;
-      --setup)            _setup; exit 0 ;;
       --install)          _install "${2:-}"; exit 0 ;;
       --clear-cache)      rm -rf "$CACHE_DIR"; echo "Cache cleared."; exit 0 ;;
       --)                 shift; city="$*"; break ;;
