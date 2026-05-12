@@ -93,8 +93,4 @@ if command -v forecast-storm &>/dev/null || [[ -x "$DEST" ]]; then
   echo  "    forecast-storm Tokyo               # specific city"
   echo  "    forecast-storm --setup             # configure API keys"
   echo  "    forecast-storm --help              # full usage"
-  echo ""
-  _info "Optional: add API keys for full features (moon, AQI):"
-  echo  "    forecast-storm --setup"
-  echo ""
 fi

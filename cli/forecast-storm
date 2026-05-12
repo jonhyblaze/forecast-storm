@@ -172,6 +172,21 @@ _fetch_astro() {
   echo "$data"
 }
 
+_fetch_air() {
+  local city="$1"
+  local cache_key="air_${city}"
+  local cached
+  if cached=$(_cache_get "$cache_key" 2>/dev/null); then echo "$cached"; return 0; fi
+  local encoded_city
+  encoded_city=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$city" 2>/dev/null || \
+    echo "$city" | sed 's/ /%20/g')
+  local url="${WEATHERAPI_BASE}/current.json?key=${WEATHERAPI_KEY}&q=${encoded_city}&aqi=yes"
+  local data
+  data=$(_http_get "$url") || return 0
+  _cache_set "$cache_key" "$data"
+  echo "$data"
+}
+
 # ─── unit converters / helpers ────────────────────────────────
 _kmh_to_ms() {
   python3 -c "print(f'{float(\"$1\")*1000/3600:.1f}')" 2>/dev/null || echo "$1"
@@ -210,23 +225,22 @@ else: print('Waning Crescent')
 }
 
 _weather_icon() {
-  # single-width geometric Unicode — no emoji, predictable column width
   local icon="$1"
   case "$icon" in
-    clear-day)           echo "◎"  ;;
-    clear-night)         echo "◗"  ;;
-    partly-cloudy-day)   echo "◑"  ;;
-    partly-cloudy-night) echo "◐"  ;;
-    cloudy)              echo $''  ;;
-    rain)                echo "≋"  ;;
-    showers-day)         echo "≋"  ;;
-    snow)                echo "⊛"  ;;
-    sleet)               echo "≈"  ;;
-    wind)                echo "≋"  ;;
-    fog)                 echo "≡"  ;;
-    thunder-rain)        echo "◆"  ;;
-    thunder-showers-day) echo "◆"  ;;
-    *)                   echo "◌"  ;;
+    clear-day)           echo "☀️"  ;;
+    clear-night)         echo "🌙"  ;;
+    partly-cloudy-day)   echo "⛅"  ;;
+    partly-cloudy-night) echo "🌙"  ;;
+    cloudy)              echo "☁️"  ;;
+    rain)                echo "🌧️"  ;;
+    showers-day)         echo "🌦️"  ;;
+    snow)                echo "🌨️"  ;;
+    sleet)               echo "🌨️"  ;;
+    wind)                echo "💨"  ;;
+    fog)                 echo "🌫️"  ;;
+    thunder-rain)        echo "⛈️"  ;;
+    thunder-showers-day) echo "⛈️"  ;;
+    *)                   echo "🌥️"  ;;
   esac
 }
 
@@ -265,6 +279,16 @@ elif a<=200:print('Unhealthy   ','\\033[38;5;196m')
 elif a<=300:print('Very Unhealthy','\\033[38;5;201m')
 else:       print('Hazardous   ','\\033[38;5;88m')
 " 2>/dev/null || echo "—"
+}
+
+_aqi_epa_info() {
+  python3 -c "
+idx=int(float('$1'))
+data={1:('Good','\\033[38;5;120m'),2:('Moderate','\\033[38;5;220m'),3:('Sensitive Grp','\\033[38;5;214m'),4:('Unhealthy','\\033[38;5;196m'),5:('Very Unhealthy','\\033[38;5;201m'),6:('Hazardous','\\033[38;5;88m')}
+l,c=data.get(idx,('Unknown',''))
+print(l)
+print(c,end='')
+" 2>/dev/null || printf 'Unknown\n'
 }
 
 _pressure_level() {
@@ -432,8 +456,8 @@ _render_today() {
   hum_r=$(_round "$hum")
   pp_r=$(_round "$(echo "$data" | jq -r '.days[0].precipprob // .currentConditions.precipprob // 0')")
 
-  local therm=$''   # nf-fa-thermometer-half
-  local drop=$''    # nf-fa-tint (droplet)
+  local therm="🌡️"
+  local drop="💧"
 
   local W=48
   _box_title $W "TODAY"
@@ -457,7 +481,7 @@ _render_forecast() {
   local data="$1"
   local W=48
   _box_title $W "FORECAST"
-  _box_mid $W "${FG_DGRAY}    Date       High  Low   Rain${RESET}"
+  _box_mid $W "${FG_DGRAY}     Date      High  Low   Rain${RESET}"
   _box_sep $W
   local i
   for i in 1 2 3 4; do
@@ -547,16 +571,16 @@ _render_conditions() {
   local W=48 max_vis=20
   _box_title $W "CONDITIONS"
   _box_mid $W " ${FG_DGRAY}Precip prob${RESET}    ${FG_SKY}$(printf '%3d' "$pp_r")%${RESET}  $(_hbar "$pp_r" "100" "10" "$FG_SKY")"
-  _box_mid $W " ${FG_DGRAY}Precip${RESET}         ${FG_LBLUE}${precip_r} mm${RESET}"
+  _box_mid $W " ${FG_DGRAY}Precip${RESET}         ${FG_LBLUE}${precip_r}mm${RESET}"
   _box_mid $W " ${FG_DGRAY}Cloud cover${RESET}    ${FG_GRAY}$(printf '%3d' "$cloud_r")%${RESET}  $(_hbar "$cloud_r" "100" "10" "$FG_GRAY")"
   _box_mid $W " ${FG_DGRAY}Humidity${RESET}       ${FG_CYAN}$(printf '%3d' "$hum_r")%${RESET}  $(_hbar "$hum_r" "100" "10" "$FG_CYAN")"
-  _box_mid $W " ${FG_DGRAY}Visibility${RESET}     ${FG_LGRAY}$(printf '%3d' "$vis_r") km${RESET}  $(_hbar "$vis_r" "$max_vis" "10" "$FG_LGRAY")"
+  _box_mid $W " ${FG_DGRAY}Visibility${RESET}     ${FG_LGRAY}$(printf '%3d' "$vis_r")km${RESET}  $(_hbar "$vis_r" "$max_vis" "10" "$FG_LGRAY")"
   _box_bot $W
 }
 
 # ─── section: AIR ─────────────────────────────────────────────
 _render_air() {
-  local data="$1"
+  local data="$1" air="${2:-}"
   local today
   today=$(echo "$data" | jq -r '.currentConditions // .days[0]')
 
@@ -577,6 +601,17 @@ _render_air() {
   _box_title $W "AIR"
   _box_mid $W " ${FG_DGRAY}UV Index${RESET}       ${uv_color}${BOLD}$(printf '%2d' "$uv_r")${RESET}  ${FG_DGRAY}${uv_lv}${RESET}  $(_hbar "$uv_r" "12" "10" "$uv_color")"
   _box_mid $W " ${FG_DGRAY}Pressure${RESET}       ${FG_PINK}${press_r} hPa${RESET}  ${FG_DGRAY}${press_lv}${RESET}"
+  if [[ -n "$air" ]]; then
+    local epa
+    epa=$(echo "$air" | jq -r '.current.air_quality["us-epa-index"] // empty' 2>/dev/null || echo "")
+    if [[ -n "$epa" && "$epa" != "null" ]]; then
+      local aqi_info aqi_label aqi_color_esc
+      aqi_info=$(_aqi_epa_info "$epa")
+      aqi_label=$(echo "$aqi_info" | head -1)
+      aqi_color_esc=$(echo "$aqi_info" | tail -1)
+      _box_mid $W " ${FG_DGRAY}AQI Index${RESET}     ${aqi_color_esc}${BOLD}${aqi_label}${RESET}  $(_hbar "$epa" "6" "6" "$aqi_color_esc")"
+    fi
+  fi
   _box_bot $W
 }
 
@@ -593,20 +628,9 @@ _render_sun() {
   set=$(echo "$set"   | cut -c1-5)
 
   local W=48
-  local icon_sunrise="\ue34c"
-  local icon_sunset="\ue34d"
-
   _box_title $W "SUN"
-  _box_empty $W
-  _box_mid $W "          · · ·"
-  _box_mid $W "         ╲  │  ╱"
-  _box_mid $W "       ─ ─  ${FG_GOLD}◎${RESET}  ─ ─"
-  _box_mid $W "         ╱  │  ╲"
-  _box_mid $W "          · · ·"
-  _box_empty $W
-  _box_sep $W
-  _box_mid $W " ${FG_GOLD}${icon_sunrise}${RESET}  ${FG_DGRAY}Sunrise${RESET}   ${FG_GOLD}${rise}${RESET}"
-  _box_mid $W " ${FG_ORANGE}${icon_sunset}${RESET}  ${FG_DGRAY}Sunset${RESET}    ${FG_ORANGE}${set}${RESET}"
+  _box_mid $W " 🌅  ${FG_DGRAY}Sunrise${RESET}   ${FG_GOLD}${rise}${RESET}"
+  _box_mid $W " 🌇  ${FG_DGRAY}Sunset${RESET}    ${FG_ORANGE}${set}${RESET}"
   _box_bot $W
 }
 
@@ -704,7 +728,7 @@ EOF
 
 # ─── full TUI render ──────────────────────────────────────────
 _render_tui() {
-  local data="$1" astro="$2"
+  local data="$1" astro="$2" air="${3:-}"
   local W=48
   clear
   _banner
@@ -715,7 +739,7 @@ _render_tui() {
   col_forecast=$(_render_forecast "$data")
   col_wind=$(_render_wind        "$data")
   col_cond=$(_render_conditions  "$data")
-  col_air=$(_render_air          "$data")
+  col_air=$(_render_air          "$data" "$air")
   col_sun=$(_render_sun          "$data")
   col_moon=$(_render_moon        "$data" "$astro")
 
@@ -740,11 +764,12 @@ _interactive() {
   local last_city="$city"
   while true; do
     _spinner_start "fetching $last_city"
-    local data astro
+    local data astro air
     data=$(_fetch_weather "$last_city") || { _spinner_stop; _die "fetch failed"; }
     astro=$(_fetch_astro "$last_city" 2>/dev/null || echo "")
+    air=$(_fetch_air "$last_city" 2>/dev/null || echo "")
     _spinner_stop
-    _render_tui "$data" "$astro"
+    _render_tui "$data" "$astro" "$air"
     echo -e "${FG_DGRAY}  [r] refresh  [c] change city  [q] quit  [h] help${RESET}"
     echo -n "  > "
     local key
@@ -765,7 +790,8 @@ _interactive() {
 _cache_del() {
   local city="$1"
   rm -f "$CACHE_DIR/$(_cache_key "vc_${city}").json" \
-         "$CACHE_DIR/$(_cache_key "astro_${city}").json" 2>/dev/null || true
+         "$CACHE_DIR/$(_cache_key "astro_${city}").json" \
+         "$CACHE_DIR/$(_cache_key "air_${city}").json" 2>/dev/null || true
 }
 
 # ─── install self ─────────────────────────────────────────────
@@ -830,11 +856,12 @@ _run_once_tui() {
   local city="$1" force_refresh="$2"
   [[ "$force_refresh" == "1" ]] && _cache_del "$city"
   _spinner_start "fetching $city"
-  local data astro
+  local data astro air
   data=$(_fetch_weather "$city") || { _spinner_stop; _die "fetch failed"; }
   astro=$(_fetch_astro "$city" 2>/dev/null || echo "")
+  air=$(_fetch_air "$city" 2>/dev/null || echo "")
   _spinner_stop
-  _render_tui "$data" "$astro"
+  _render_tui "$data" "$astro" "$air"
 }
 
 # ─── main entry point ─────────────────────────────────────────
