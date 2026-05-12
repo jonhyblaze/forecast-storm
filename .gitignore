@@ -43,3 +43,7 @@ next-env.d.ts
 # prettier
 .prettierrc
 .prettierignore
+
+# agents
+CLAUDE.md
+GEMINI.md

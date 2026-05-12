@@ -201,12 +201,11 @@ _compass() {
 }
 
 _moon_icon() {
-  # moonphase is 0..1 float — single-width geometric symbols
   local phase="$1"
   local p
   p=$(python3 -c "p=float('$phase'); print(int(p*8))" 2>/dev/null || echo 4)
-  local icons=('○' '◔' '◑' '◕' '●' '◕' '◐' '◔' '○')
-  echo "${icons[$p]:-●}"
+  local icons=('🌑' '🌒' '🌓' '🌔' '🌕' '🌖' '🌗' '🌘' '🌑')
+  echo "${icons[$p]:-🌕}"
 }
 
 _moon_name() {
@@ -328,6 +327,14 @@ except: print('$d')
 " 2>/dev/null || echo "$d"
 }
 
+_to24h() {
+  python3 -c "
+from datetime import datetime
+try:    print(datetime.strptime('$1', '%I:%M %p').strftime('%H:%M'))
+except: print('$1')
+" 2>/dev/null || echo "$1"
+}
+
 _today_label() {
   python3 -c "from datetime import datetime; print(datetime.now().strftime('%A, %B %-d %Y'))" 2>/dev/null || date '+%A, %B %d %Y'
 }
@@ -395,7 +402,7 @@ _cols() {
     local l="${la[$i]:-}" r="${ra[$i]:-}"
     local vis vlen pad
     vis=$(printf '%s' "$l" | sed 's/\x1b\[[0-9;]*m//g')
-    vlen=${#vis}
+    vlen=$(_display_width "$vis")
     pad=$(( lw - vlen ))
     (( pad < 0 )) && pad=0
     printf "%s%*s  %s\n" "$l" "$pad" "" "$r"
@@ -554,8 +561,7 @@ _render_conditions() {
   day0=$(echo "$data" | jq -r '.days[0]')
 
   local pp precip cloud hum vis
-  pp=$(echo "$today"     | jq -r '.precipprob // (env.day0 | fromjson.precipprob) // 0' 2>/dev/null || \
-       echo "$day0"      | jq -r '.precipprob // 0')
+  pp=$(echo "$data" | jq -r '.days[0].precipprob // .currentConditions.precipprob // 0')
   precip=$(echo "$today" | jq -r '.precip // 0')
   cloud=$(echo "$today"  | jq -r '.cloudcover // 0')
   hum=$(echo "$today"    | jq -r '.humidity // 0')
@@ -650,6 +656,8 @@ _render_moon() {
     moonrise=$(echo "$astro" | jq -r '.astronomy.astro.moonrise // "—"' 2>/dev/null || echo "—")
     moonset=$(echo "$astro"  | jq -r '.astronomy.astro.moonset // "—"' 2>/dev/null || echo "—")
     illum=$(echo "$astro"    | jq -r '.astronomy.astro.moon_illumination // "—"' 2>/dev/null || echo "—")
+    [[ "$moonrise" != "—" ]] && moonrise=$(_to24h "$moonrise")
+    [[ "$moonset"  != "—" ]] && moonset=$(_to24h "$moonset")
   else
     moonrise="—"
     moonset="—"

@@ -91,6 +91,5 @@ if command -v forecast-storm &>/dev/null || [[ -x "$DEST" ]]; then
   _info "Quick start:"
   echo  "    forecast-storm                     # auto-detect your city"
   echo  "    forecast-storm Tokyo               # specific city"
-  echo  "    forecast-storm --setup             # configure API keys"
   echo  "    forecast-storm --help              # full usage"
 fi
